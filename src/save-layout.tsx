@@ -2,6 +2,7 @@ import { Action, ActionPanel, Form, Icon, Toast, showToast } from "@raycast/api"
 import { useState } from "react";
 import { createLayoutFromSnapshot } from "./capture";
 import { getLayout, upsertLayout } from "./layout-store";
+import { ErrorDetail } from "./ui";
 import { formatYabaiRequirementHint } from "./yabai-errors";
 import { ensureYabai, getSnapshot, YabaiUnavailableError } from "./yabai";
 
@@ -12,9 +13,11 @@ interface Values {
 
 export default function Command() {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(values: Values) {
     setIsLoading(true);
+    setError(null);
     const toast = await showToast({ style: Toast.Style.Animated, title: "Saving layout" });
 
     try {
@@ -32,12 +35,18 @@ export default function Command() {
       toast.title = existing ? "Layout updated" : "Layout saved";
       toast.message = `${layout.windows.length} windows captured`;
     } catch (error) {
+      const message = error instanceof YabaiUnavailableError ? error.message : "Unexpected error";
       toast.style = Toast.Style.Failure;
       toast.title = "Unable to save layout";
-      toast.message = error instanceof YabaiUnavailableError ? error.message : "Unexpected error";
+      toast.message = message;
+      setError(`${message}\n\n${formatYabaiRequirementHint()}`);
     } finally {
       setIsLoading(false);
     }
+  }
+
+  if (error) {
+    return <ErrorDetail title="Unable to save layout" error={error} onBack={() => setError(null)} />;
   }
 
   return (

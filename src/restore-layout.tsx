@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { getLayouts } from "./layout-store";
 import { restoreLayout } from "./restore";
 import { SavedLayout } from "./types";
-import { EmptyState, layoutAccessories } from "./ui";
+import { EmptyState, ErrorDetail, layoutAccessories } from "./ui";
 import { formatYabaiRequirementHint } from "./yabai-errors";
 import { ensureYabai, YabaiUnavailableError } from "./yabai";
 
@@ -36,14 +36,16 @@ export default function Command() {
       toast.title = `Restored ${layout.name}`;
       toast.message = `${plan.windowMoves.length} windows moved, ${plan.unmatchedSavedWindows.length} missing`;
     } catch (restoreError) {
+      const message = restoreError instanceof YabaiUnavailableError ? restoreError.message : "Unexpected error";
       toast.style = Toast.Style.Failure;
       toast.title = "Restore failed";
-      toast.message = restoreError instanceof YabaiUnavailableError ? restoreError.message : "Unexpected error";
+      toast.message = message;
+      setError(`${message}\n\n${formatYabaiRequirementHint()}`);
     }
   }
 
   if (error) {
-    return <List>{<EmptyState title="yabai unavailable" description={`${error} ${formatYabaiRequirementHint()}`} />}</List>;
+    return <ErrorDetail title="Restore failed" error={error} onBack={() => setError(null)} />;
   }
 
   return (

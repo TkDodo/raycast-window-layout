@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { access } from "node:fs/promises";
+import { homedir, userInfo } from "node:os";
 import { promisify } from "node:util";
 import { SystemSnapshot, YabaiDisplay, YabaiSpace, YabaiWindow } from "./types";
 
@@ -30,6 +31,18 @@ export function getYabaiCandidates(envPath = process.env.YABAI_PATH): string[] {
   return [envPath, ...DEFAULT_YABAI_CANDIDATES].filter((value): value is string => Boolean(value));
 }
 
+export function getYabaiEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const user = env.USER ?? env.LOGNAME ?? userInfo().username;
+  const home = env.HOME ?? homedir();
+
+  return {
+    ...env,
+    USER: user,
+    LOGNAME: env.LOGNAME ?? user,
+    HOME: home,
+  };
+}
+
 async function resolveYabaiBinary(): Promise<string> {
   for (const candidate of getYabaiCandidates()) {
     if (await isExecutable(candidate)) {
@@ -49,11 +62,19 @@ function toYabaiError(error: unknown, command: string): YabaiUnavailableError {
 
   const message = "message" in error ? String(error.message) : "";
   const cause = "cause" in error ? String(error.cause) : "";
-  const combined = [message, cause].join(" ").trim();
+  const stderr = "stderr" in error ? String(error.stderr ?? "") : "";
+  const stdout = "stdout" in error ? String(error.stdout ?? "") : "";
+  const combined = [stderr, stdout, message, cause].filter(Boolean).join(" ").trim();
 
   if (combined.includes("ENOENT")) {
     return new YabaiUnavailableError(
       `Raycast could not find yabai at ${command}. Install it in a standard location or set YABAI_PATH, then restart Raycast.`,
+    );
+  }
+
+  if (combined.includes("env USER not set")) {
+    return new YabaiUnavailableError(
+      `Found yabai at ${command}, but Raycast launched it without the required USER environment. Restart Raycast and try again.`,
     );
   }
 
@@ -82,7 +103,7 @@ async function runYabaiJson<T>(args: string[]): Promise<T> {
   const command = await resolveYabaiBinary();
 
   try {
-    const { stdout } = await execFileAsync(command, ["-m", ...args]);
+    const { stdout } = await execFileAsync(command, ["-m", ...args], { env: getYabaiEnvironment() });
     return JSON.parse(stdout) as T;
   } catch (error) {
     throw toYabaiError(error, command);
@@ -93,7 +114,7 @@ async function runYabai(args: string[]): Promise<void> {
   const command = await resolveYabaiBinary();
 
   try {
-    await execFileAsync(command, ["-m", ...args]);
+    await execFileAsync(command, ["-m", ...args], { env: getYabaiEnvironment() });
   } catch (error) {
     throw toYabaiError(error, command);
   }
