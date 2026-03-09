@@ -2,6 +2,7 @@ import { Action, ActionPanel, Form, Icon, Toast, showToast } from "@raycast/api"
 import { useState } from "react";
 import { createLayoutFromSnapshot } from "./capture";
 import { getLayout, upsertLayout } from "./layout-store";
+import { formatYabaiRequirementHint } from "./yabai-errors";
 import { ensureYabai, getSnapshot, YabaiUnavailableError } from "./yabai";
 
 interface Values {
@@ -52,7 +53,7 @@ export default function Command() {
       <Form.TextArea id="notes" title="Notes" placeholder="Optional context for this layout" />
       <Form.Description
         title="Requirements"
-        text="Requires yabai to be installed and running, with permissions to query displays/spaces/windows."
+        text={formatYabaiRequirementHint()}
       />
     </Form>
   );

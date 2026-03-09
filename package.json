@@ -2,7 +2,46 @@
   "name": "raycast-window-layout",
   "version": "0.1.0",
   "private": true,
+  "title": "Window Layout Restore",
   "description": "Raycast extension to save and restore named macOS window layouts via yabai.",
+  "icon": "icon.png",
+  "author": "TkDodo",
+  "license": "MIT",
+  "categories": [
+    "Developer Tools",
+    "Productivity"
+  ],
+  "keywords": [
+    "window",
+    "layout",
+    "spaces",
+    "desktop",
+    "yabai",
+    "macos"
+  ],
+  "commands": [
+    {
+      "name": "save-layout",
+      "title": "Save Layout",
+      "subtitle": "Capture the current window arrangement",
+      "description": "Save the current display, Space, and window arrangement into a named layout.",
+      "mode": "view"
+    },
+    {
+      "name": "restore-layout",
+      "title": "Restore Layout",
+      "subtitle": "Apply a saved layout",
+      "description": "Restore a saved layout by moving current windows onto their saved displays, Spaces, and frames.",
+      "mode": "view"
+    },
+    {
+      "name": "manage-layouts",
+      "title": "Manage Layouts",
+      "subtitle": "Rename, delete, export, or import",
+      "description": "Manage saved layouts and inspect or transfer their JSON definitions.",
+      "mode": "view"
+    }
+  ],
   "scripts": {
     "build": "tsc --noEmit",
     "dev": "ray develop",
@@ -18,26 +57,5 @@
     "@types/react": "^19.2.14",
     "typescript": "^5.8.2",
     "vitest": "^3.0.9"
-  },
-  "raycast": {
-    "schemaVersion": 1,
-    "title": "Window Layout Restore",
-    "commands": [
-      {
-        "name": "save-layout",
-        "title": "Save Layout",
-        "mode": "view"
-      },
-      {
-        "name": "restore-layout",
-        "title": "Restore Layout",
-        "mode": "view"
-      },
-      {
-        "name": "manage-layouts",
-        "title": "Manage Layouts",
-        "mode": "view"
-      }
-    ]
   }
 }

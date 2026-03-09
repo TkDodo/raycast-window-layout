@@ -4,6 +4,7 @@ import { getLayouts } from "./layout-store";
 import { restoreLayout } from "./restore";
 import { SavedLayout } from "./types";
 import { EmptyState, layoutAccessories } from "./ui";
+import { formatYabaiRequirementHint } from "./yabai-errors";
 import { ensureYabai, YabaiUnavailableError } from "./yabai";
 
 export default function Command() {
@@ -42,7 +43,7 @@ export default function Command() {
   }
 
   if (error) {
-    return <List>{<EmptyState title="yabai unavailable" description={error} />}</List>;
+    return <List>{<EmptyState title="yabai unavailable" description={`${error} ${formatYabaiRequirementHint()}`} />}</List>;
   }
 
   return (
