@@ -69,6 +69,7 @@ export interface SystemSnapshot {
 export interface DisplayMatch {
   layoutDisplayId: string;
   currentDisplayId: number;
+  currentDisplayIndex: number;
 }
 
 export interface PlannedSpaceCreation {
@@ -82,6 +83,7 @@ export interface PlannedWindowMove {
   app: string;
   title: string;
   targetDisplayId: number;
+  targetDisplayIndex: number;
   targetSpaceIndex: number;
   targetFrame: Rect;
   matchedBy: "title" | "app";

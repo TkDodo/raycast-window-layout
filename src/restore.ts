@@ -32,11 +32,11 @@ export async function restoreLayout(layout: SavedLayout) {
   const plan = createRestorePlan(layout, hydratedSnapshot);
 
   for (const move of plan.windowMoves) {
-    await moveWindowToDisplay(move.windowId, move.targetDisplayId);
+    await moveWindowToDisplay(move.windowId, move.targetDisplayIndex);
 
     const targetSpace = getSpaceForDisplayAndPosition(hydratedSnapshot.spaces, move.targetDisplayId, move.targetSpaceIndex);
     if (targetSpace) {
-      await moveWindowToSpace(move.windowId, targetSpace.id);
+      await moveWindowToSpace(move.windowId, targetSpace.index);
     }
 
     await resizeWindow(move.windowId, move.targetFrame);

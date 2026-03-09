@@ -98,6 +98,7 @@ export function createRestorePlan(layout: SavedLayout, snapshot: SystemSnapshot)
       app: match.candidate.app,
       title: match.candidate.title,
       targetDisplayId: targetDisplay.id,
+      targetDisplayIndex: targetDisplay.index,
       targetSpaceIndex: savedWindow.targetSpaceIndex,
       targetFrame: savedWindow.targetFrame,
       matchedBy: match.matchedBy,
@@ -132,6 +133,7 @@ export function createRestorePlan(layout: SavedLayout, snapshot: SystemSnapshot)
     displayMatches: Array.from(displayMatches.entries()).map(([layoutDisplayId, currentDisplay]) => ({
       layoutDisplayId,
       currentDisplayId: currentDisplay.id,
+      currentDisplayIndex: currentDisplay.index,
     })),
     spacesToCreate,
     windowMoves,
