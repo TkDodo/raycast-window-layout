@@ -43,7 +43,7 @@ export function createLayoutFromSnapshot(name: string, snapshot: SystemSnapshot,
       label: display.label ?? `Display ${display.index}`,
     })),
     windows: snapshot.windows
-      .filter((window) => !window.isHidden && !window.isMinimized)
+      .filter((window) => !window.isHidden && !window.isMinimized && window.isVisible !== false)
       .map((window, index) => ({
         id: `${window.app}:${window.display}:${window.space}:${index}`,
         app: window.app,

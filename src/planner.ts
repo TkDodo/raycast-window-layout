@@ -55,7 +55,7 @@ function matchDisplays(layout: SavedLayout, snapshot: SystemSnapshot): Map<strin
 }
 
 function findCurrentWindows(snapshot: SystemSnapshot): YabaiWindow[] {
-  return snapshot.windows.filter((window) => !window.isHidden && !window.isMinimized);
+  return snapshot.windows.filter((window) => !window.isHidden && !window.isMinimized && window.isVisible !== false);
 }
 
 function rankWindowMatch(savedWindow: SavedWindow, candidate: YabaiWindow): { score: number; matchedBy?: "title" | "app" } {

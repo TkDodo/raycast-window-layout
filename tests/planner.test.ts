@@ -142,6 +142,28 @@ describe("createLayoutFromSnapshot", () => {
       ]),
     );
   });
+
+  it("skips windows that are present in yabai but not visible", () => {
+    const hiddenSnapshot: SystemSnapshot = {
+      ...snapshot,
+      windows: [
+        ...snapshot.windows,
+        {
+          id: 103,
+          app: "GitHub Desktop",
+          title: "",
+          display: 1,
+          space: 1,
+          frame: { x: 468, y: 201, w: 960, h: 660 },
+          isVisible: false,
+        },
+      ],
+    };
+
+    const layout = createLayoutFromSnapshot("Home", hiddenSnapshot);
+
+    expect(layout.windows.find((window) => window.app === "GitHub Desktop")).toBeUndefined();
+  });
 });
 
 describe("createRestorePlan", () => {

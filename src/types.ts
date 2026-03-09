@@ -59,6 +59,7 @@ export interface YabaiWindow {
   frame: Rect;
   isMinimized?: boolean;
   isHidden?: boolean;
+  isVisible?: boolean;
 }
 
 export interface SystemSnapshot {
@@ -97,4 +98,15 @@ export interface RestorePlan {
   windowMoves: PlannedWindowMove[];
   unmatchedSavedWindows: SavedWindow[];
   unmatchedCurrentWindows: YabaiWindow[];
+}
+
+export interface RestoreFailure {
+  app: string;
+  title: string;
+  reason: string;
+}
+
+export interface RestoreResult {
+  plan: RestorePlan;
+  failures: RestoreFailure[];
 }

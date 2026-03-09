@@ -386,4 +386,91 @@ describe("restoreLayout", () => {
     expect(moveWindowToSpace).toHaveBeenCalledWith(4357, 1);
     expect(resizeWindow).toHaveBeenCalledWith(4357, { x: 10, y: 20, w: 1200, h: 900 });
   });
+
+  it("continues restoring later windows when one window fails and reports that failure", async () => {
+    const snapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 95,
+          uuid: "display-work",
+          index: 1,
+          frame: { x: 0, y: 0, w: 1728, h: 1117 },
+          spaces: [83],
+          label: "Studio Display",
+        },
+      ],
+      spaces: [{ id: 83, index: 1, display: 95 }],
+      windows: [
+        {
+          id: 95,
+          app: "GitHub Desktop",
+          title: "",
+          display: 95,
+          space: 83,
+          frame: { x: 0, y: 0, w: 1000, h: 900 },
+        },
+        {
+          id: 4357,
+          app: "Discord",
+          title: "TanStack - Discord",
+          display: 95,
+          space: 83,
+          frame: { x: 0, y: 0, w: 1000, h: 900 },
+        },
+      ],
+    };
+
+    const layout: SavedLayout = {
+      name: "Work",
+      createdAt: "2026-03-09T00:00:00.000Z",
+      updatedAt: "2026-03-09T00:00:00.000Z",
+      displays: [
+        {
+          uuid: "display-work",
+          arrangementIndex: 1,
+          frame: { x: 0, y: 0, w: 1728, h: 1117 },
+          label: "Studio Display",
+        },
+      ],
+      windows: [
+        {
+          id: "ghd",
+          app: "GitHub Desktop",
+          title: "",
+          matchMode: "app",
+          targetDisplayId: "display-work",
+          targetSpaceIndex: 1,
+          targetSpacePosition: 1,
+          targetFrame: { x: 10, y: 20, w: 500, h: 500 },
+        },
+        {
+          id: "discord",
+          app: "Discord",
+          title: "TanStack - Discord",
+          matchMode: "app",
+          targetDisplayId: "display-work",
+          targetSpaceIndex: 1,
+          targetSpacePosition: 1,
+          targetFrame: { x: 20, y: 30, w: 600, h: 600 },
+        },
+      ],
+    };
+
+    getSnapshot.mockResolvedValue(snapshot);
+    moveWindowToDisplay
+      .mockRejectedValueOnce(new Error("yabai command failed: could not locate the window to act on!"))
+      .mockResolvedValueOnce(undefined);
+
+    const { restoreLayout } = await import("../src/restore");
+    const result = await restoreLayout(layout);
+
+    expect(moveWindowToDisplay).toHaveBeenNthCalledWith(1, 95, 1);
+    expect(moveWindowToDisplay).toHaveBeenNthCalledWith(2, 4357, 1);
+    expect(result.failures).toEqual([
+      expect.objectContaining({
+        app: "GitHub Desktop",
+      }),
+    ]);
+    expect(moveWindowToSpace).toHaveBeenCalledWith(4357, 1);
+  });
 });

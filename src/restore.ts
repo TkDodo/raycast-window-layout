@@ -1,5 +1,5 @@
 import { createRestorePlan } from "./planner";
-import { PlannedWindowMove, SavedLayout, SystemSnapshot, YabaiSpace, YabaiWindow } from "./types";
+import { PlannedWindowMove, RestoreFailure, RestoreResult, SavedLayout, SystemSnapshot, YabaiSpace, YabaiWindow } from "./types";
 import { createSpaceOnDisplay, getSnapshot, moveWindowToDisplay, moveWindowToSpace, resizeWindow } from "./yabai";
 
 function getSpaceForDisplayAndPosition(spaces: YabaiSpace[], displayId: number, position: number): YabaiSpace | undefined {
@@ -63,16 +63,6 @@ async function runWindowMoveSequence(windowId: number, move: PlannedWindowMove, 
   await resizeWindow(windowId, move.targetFrame);
 }
 
-interface RestoreFailure {
-  app: string;
-  title: string;
-  reason: string;
-}
-
-function formatWindowLabel(move: PlannedWindowMove): string {
-  return move.title ? `${move.app} (${move.title})` : move.app;
-}
-
 function formatFailureLabel(failure: RestoreFailure): string {
   return failure.title ? `${failure.app} (${failure.title})` : failure.app;
 }
@@ -85,16 +75,16 @@ function toRestoreFailure(move: PlannedWindowMove, error: unknown): RestoreFailu
   };
 }
 
-function formatRestoreFailures(failures: RestoreFailure[]): string {
+export function formatRestoreFailures(failures: RestoreFailure[]): string {
   const summary = failures.map((failure) => `- ${formatFailureLabel(failure)}`).join("\n");
   const details = failures
     .map((failure) => `${formatFailureLabel(failure)}: ${failure.reason}`)
     .join("\n\n");
 
-  return [`Failed to restore ${failures.length} window${failures.length === 1 ? "" : "s"}:`, summary, "", details].join("\n");
+  return [`Skipped ${failures.length} window${failures.length === 1 ? "" : "s"} during restore:`, summary, "", details].join("\n");
 }
 
-export async function restoreLayout(layout: SavedLayout) {
+export async function restoreLayout(layout: SavedLayout): Promise<RestoreResult> {
   const initialSnapshot = await getSnapshot();
   const hydratedSnapshot = await ensureSpaces(initialSnapshot, layout);
   const plan = createRestorePlan(layout, hydratedSnapshot);
@@ -135,9 +125,5 @@ export async function restoreLayout(layout: SavedLayout) {
     }
   }
 
-  if (failures.length > 0) {
-    throw new Error(formatRestoreFailures(failures));
-  }
-
-  return plan;
+  return {plan, failures};
 }
