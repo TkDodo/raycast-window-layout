@@ -120,14 +120,6 @@ async function runYabai(args: string[]): Promise<void> {
   }
 }
 
-async function focusWindow(windowId: number): Promise<void> {
-  await runYabai(["window", "--focus", String(windowId)]);
-}
-
-export async function selectWindow(windowId: number): Promise<void> {
-  await focusWindow(windowId);
-}
-
 export async function ensureYabai(): Promise<void> {
   await runYabaiJson<YabaiDisplay[]>(["query", "--displays"]);
 }
@@ -148,14 +140,14 @@ export async function createSpaceOnDisplay(displayId: number): Promise<void> {
 }
 
 export async function moveWindowToSpace(windowId: number, spaceIndex: number): Promise<void> {
-  await runYabai(["window", "--space", String(spaceIndex)]);
+  await runYabai(["window", String(windowId), "--space", String(spaceIndex)]);
 }
 
 export async function moveWindowToDisplay(windowId: number, displayId: number): Promise<void> {
-  await runYabai(["window", "--display", String(displayId)]);
+  await runYabai(["window", String(windowId), "--display", String(displayId)]);
 }
 
 export async function resizeWindow(windowId: number, frame: { x: number; y: number; w: number; h: number }): Promise<void> {
-  await runYabai(["window", "--move", `abs:${frame.x}:${frame.y}`]);
-  await runYabai(["window", "--resize", `abs:${frame.w}:${frame.h}`]);
+  await runYabai(["window", String(windowId), "--move", `abs:${frame.x}:${frame.y}`]);
+  await runYabai(["window", String(windowId), "--resize", `abs:${frame.w}:${frame.h}`]);
 }

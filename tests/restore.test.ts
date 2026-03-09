@@ -6,7 +6,6 @@ const getSnapshot = vi.fn<() => Promise<SystemSnapshot>>();
 const moveWindowToDisplay = vi.fn();
 const moveWindowToSpace = vi.fn();
 const resizeWindow = vi.fn();
-const selectWindow = vi.fn();
 
 vi.mock("../src/yabai", () => ({
   createSpaceOnDisplay,
@@ -14,7 +13,6 @@ vi.mock("../src/yabai", () => ({
   moveWindowToDisplay,
   moveWindowToSpace,
   resizeWindow,
-  selectWindow,
 }));
 
 describe("restoreLayout", () => {
@@ -82,7 +80,6 @@ describe("restoreLayout", () => {
     const { restoreLayout } = await import("../src/restore");
     await restoreLayout(layout);
 
-    expect(selectWindow).toHaveBeenCalledWith(2548);
     expect(moveWindowToSpace).toHaveBeenCalledWith(2548, 2);
   });
 
@@ -142,7 +139,6 @@ describe("restoreLayout", () => {
     const { restoreLayout } = await import("../src/restore");
     await restoreLayout(layout);
 
-    expect(selectWindow).toHaveBeenCalledWith(2548);
     expect(moveWindowToDisplay).toHaveBeenCalledWith(2548, 1);
   });
 
@@ -226,7 +222,6 @@ describe("restoreLayout", () => {
     const { restoreLayout } = await import("../src/restore");
     await restoreLayout(layout);
 
-    expect(selectWindow).toHaveBeenCalledWith(3001);
     expect(moveWindowToDisplay).toHaveBeenCalledWith(3001, 3);
     expect(moveWindowToSpace).toHaveBeenCalledWith(3001, 7);
   });

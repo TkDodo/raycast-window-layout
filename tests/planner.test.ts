@@ -67,6 +67,81 @@ describe("createLayoutFromSnapshot", () => {
       ]),
     );
   });
+
+  it("captures mission-control space indices even when window.space already contains the global index", () => {
+    const mixedSnapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 10,
+          uuid: "built-in",
+          index: 1,
+          frame: { x: 0, y: 0, w: 1512, h: 982 },
+          spaces: [1001],
+          label: "MacBook Pro",
+        },
+        {
+          id: 20,
+          uuid: "vertical",
+          index: 2,
+          frame: { x: 4952, y: -1581, w: 1440, h: 2560 },
+          spaces: [2001, 2002, 2003],
+          label: "Vertical",
+        },
+        {
+          id: 30,
+          uuid: "wide",
+          index: 3,
+          frame: { x: 1512, y: -799, w: 3440, h: 1440 },
+          spaces: [3001, 3002, 3003],
+          label: "Wide",
+        },
+      ],
+      spaces: [
+        { id: 1001, index: 1, display: 10 },
+        { id: 2001, index: 2, display: 20 },
+        { id: 2002, index: 3, display: 20 },
+        { id: 2003, index: 4, display: 20 },
+        { id: 3001, index: 5, display: 30 },
+        { id: 3002, index: 6, display: 30 },
+        { id: 3003, index: 7, display: 30 },
+      ],
+      windows: [
+        {
+          id: 999,
+          app: "Codex",
+          title: "Codex",
+          display: 20,
+          space: 4,
+          frame: { x: 4952, y: -1556, w: 1440, h: 2535 },
+        },
+        {
+          id: 1000,
+          app: "Discord",
+          title: "Discord",
+          display: 30,
+          space: 6,
+          frame: { x: 1512, y: -774, w: 1720, h: 1415 },
+        },
+      ],
+    };
+
+    const layout = createLayoutFromSnapshot("Home", mixedSnapshot);
+
+    expect(layout.windows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          app: "Codex",
+          targetSpaceIndex: 4,
+          targetSpacePosition: 3,
+        }),
+        expect.objectContaining({
+          app: "Discord",
+          targetSpaceIndex: 6,
+          targetSpacePosition: 2,
+        }),
+      ]),
+    );
+  });
 });
 
 describe("createRestorePlan", () => {

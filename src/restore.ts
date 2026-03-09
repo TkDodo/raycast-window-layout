@@ -1,6 +1,6 @@
 import { createRestorePlan } from "./planner";
 import { SavedLayout, SystemSnapshot, YabaiSpace } from "./types";
-import { createSpaceOnDisplay, getSnapshot, moveWindowToDisplay, moveWindowToSpace, resizeWindow, selectWindow } from "./yabai";
+import { createSpaceOnDisplay, getSnapshot, moveWindowToDisplay, moveWindowToSpace, resizeWindow } from "./yabai";
 
 function getSpaceForDisplayAndPosition(spaces: YabaiSpace[], displayId: number, position: number): YabaiSpace | undefined {
   return spaces
@@ -32,7 +32,6 @@ export async function restoreLayout(layout: SavedLayout) {
   const plan = createRestorePlan(layout, hydratedSnapshot);
 
   for (const move of plan.windowMoves) {
-    await selectWindow(move.windowId);
     await moveWindowToDisplay(move.windowId, move.targetDisplayIndex);
 
     const targetSpace = getSpaceForDisplayAndPosition(hydratedSnapshot.spaces, move.targetDisplayId, move.targetSpacePosition);

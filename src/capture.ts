@@ -1,16 +1,30 @@
 import { SavedLayout, SystemSnapshot } from "./types";
 
-function getDisplaySpacePosition(snapshot: SystemSnapshot, displayId: number, spaceId: number): number {
+function resolveWindowSpace(snapshot: SystemSnapshot, displayId: number, windowSpaceRef: number) {
+  return (
+    snapshot.spaces.find((space) => space.display === displayId && space.id === windowSpaceRef) ??
+    snapshot.spaces.find((space) => space.display === displayId && space.index === windowSpaceRef) ??
+    snapshot.spaces.find((space) => space.id === windowSpaceRef) ??
+    snapshot.spaces.find((space) => space.index === windowSpaceRef)
+  );
+}
+
+function getDisplaySpacePosition(snapshot: SystemSnapshot, displayId: number, windowSpaceRef: number): number {
   const spaces = snapshot.spaces
     .filter((space) => space.display === displayId)
     .sort((left, right) => left.index - right.index);
 
-  const position = spaces.findIndex((space) => space.id === spaceId);
+  const resolvedSpace = resolveWindowSpace(snapshot, displayId, windowSpaceRef);
+  if (!resolvedSpace) {
+    return 1;
+  }
+
+  const position = spaces.findIndex((space) => space.index === resolvedSpace.index);
   return position >= 0 ? position + 1 : 1;
 }
 
-function getMissionControlSpaceIndex(snapshot: SystemSnapshot, spaceId: number): number {
-  return snapshot.spaces.find((space) => space.id === spaceId)?.index ?? 1;
+function getMissionControlSpaceIndex(snapshot: SystemSnapshot, displayId: number, windowSpaceRef: number): number {
+  return resolveWindowSpace(snapshot, displayId, windowSpaceRef)?.index ?? windowSpaceRef;
 }
 
 export function createLayoutFromSnapshot(name: string, snapshot: SystemSnapshot, notes?: string): SavedLayout {
@@ -43,7 +57,7 @@ export function createLayoutFromSnapshot(name: string, snapshot: SystemSnapshot,
 
           return display.uuid ?? `${display.index}:${display.frame.w}x${display.frame.h}:${display.label ?? `Display ${display.index}`}`;
         })(),
-        targetSpaceIndex: getMissionControlSpaceIndex(snapshot, window.space),
+        targetSpaceIndex: getMissionControlSpaceIndex(snapshot, window.display, window.space),
         targetSpacePosition: getDisplaySpacePosition(snapshot, window.display, window.space),
         targetFrame: window.frame,
       })),
