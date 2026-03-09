@@ -4,7 +4,7 @@
   "private": true,
   "title": "Window Layout Restore",
   "description": "Raycast extension to save and restore named macOS window layouts via yabai.",
-  "icon": "icon.png",
+  "icon": "extension-icon.png",
   "author": "TkDodo",
   "license": "MIT",
   "categories": [
@@ -25,6 +25,7 @@
       "title": "Save Layout",
       "subtitle": "Capture the current window arrangement",
       "description": "Save the current display, Space, and window arrangement into a named layout.",
+      "icon": "save-layout.png",
       "mode": "view"
     },
     {
@@ -32,6 +33,7 @@
       "title": "Restore Layout",
       "subtitle": "Apply a saved layout",
       "description": "Restore a saved layout by moving current windows onto their saved displays, Spaces, and frames.",
+      "icon": "restore-layout.png",
       "mode": "view"
     },
     {
@@ -39,6 +41,7 @@
       "title": "Manage Layouts",
       "subtitle": "Rename, delete, export, or import",
       "description": "Manage saved layouts and inspect or transfer their JSON definitions.",
+      "icon": "manage-layouts.png",
       "mode": "view"
     }
   ],
