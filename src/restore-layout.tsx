@@ -36,7 +36,7 @@ export default function Command() {
       toast.title = `Restored ${layout.name}`;
       toast.message = `${plan.windowMoves.length} windows moved, ${plan.unmatchedSavedWindows.length} missing`;
     } catch (restoreError) {
-      const message = restoreError instanceof YabaiUnavailableError ? restoreError.message : "Unexpected error";
+      const message = restoreError instanceof Error ? restoreError.message : "Unexpected error";
       toast.style = Toast.Style.Failure;
       toast.title = "Restore failed";
       toast.message = message;

@@ -48,11 +48,58 @@ function findCurrentWindowForMove(
   return rankedMatches[0];
 }
 
+function isMissingWindowError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("could not locate the window to act on");
+}
+
+async function runWindowMoveSequence(windowId: number, move: PlannedWindowMove, spaces: YabaiSpace[]) {
+  await moveWindowToDisplay(windowId, move.targetDisplayIndex);
+
+  const targetSpace = getSpaceForDisplayAndPosition(spaces, move.targetDisplayId, move.targetSpacePosition);
+  if (targetSpace) {
+    await moveWindowToSpace(windowId, move.targetSpaceIndex);
+  }
+
+  await resizeWindow(windowId, move.targetFrame);
+}
+
+interface RestoreFailure {
+  app: string;
+  title: string;
+  reason: string;
+}
+
+function formatWindowLabel(move: PlannedWindowMove): string {
+  return move.title ? `${move.app} (${move.title})` : move.app;
+}
+
+function formatFailureLabel(failure: RestoreFailure): string {
+  return failure.title ? `${failure.app} (${failure.title})` : failure.app;
+}
+
+function toRestoreFailure(move: PlannedWindowMove, error: unknown): RestoreFailure {
+  return {
+    app: move.app,
+    title: move.title,
+    reason: error instanceof Error ? error.message : "Unknown restore error",
+  };
+}
+
+function formatRestoreFailures(failures: RestoreFailure[]): string {
+  const summary = failures.map((failure) => `- ${formatFailureLabel(failure)}`).join("\n");
+  const details = failures
+    .map((failure) => `${formatFailureLabel(failure)}: ${failure.reason}`)
+    .join("\n\n");
+
+  return [`Failed to restore ${failures.length} window${failures.length === 1 ? "" : "s"}:`, summary, "", details].join("\n");
+}
+
 export async function restoreLayout(layout: SavedLayout) {
   const initialSnapshot = await getSnapshot();
   const hydratedSnapshot = await ensureSpaces(initialSnapshot, layout);
   const plan = createRestorePlan(layout, hydratedSnapshot);
   const usedWindowIds = new Set<number>();
+  const failures: RestoreFailure[] = [];
 
   for (const move of plan.windowMoves) {
     const currentSnapshot = await getSnapshot();
@@ -62,15 +109,34 @@ export async function restoreLayout(layout: SavedLayout) {
     }
 
     usedWindowIds.add(currentWindow.id);
+    try {
+      await runWindowMoveSequence(currentWindow.id, move, hydratedSnapshot.spaces);
+    } catch (error) {
+      if (!isMissingWindowError(error)) {
+        failures.push(toRestoreFailure(move, error));
+        continue;
+      }
 
-    await moveWindowToDisplay(currentWindow.id, move.targetDisplayIndex);
+      usedWindowIds.delete(currentWindow.id);
+      const retrySnapshot = await getSnapshot();
+      const retryWindow = findCurrentWindowForMove(move, retrySnapshot, usedWindowIds);
+      if (!retryWindow || retryWindow.id === currentWindow.id) {
+        failures.push(toRestoreFailure(move, error));
+        continue;
+      }
 
-    const targetSpace = getSpaceForDisplayAndPosition(hydratedSnapshot.spaces, move.targetDisplayId, move.targetSpacePosition);
-    if (targetSpace) {
-      await moveWindowToSpace(currentWindow.id, move.targetSpaceIndex);
+      usedWindowIds.add(retryWindow.id);
+      try {
+        await runWindowMoveSequence(retryWindow.id, move, hydratedSnapshot.spaces);
+      } catch (retryError) {
+        failures.push(toRestoreFailure(move, retryError));
+      }
+      continue;
     }
+  }
 
-    await resizeWindow(currentWindow.id, move.targetFrame);
+  if (failures.length > 0) {
+    throw new Error(formatRestoreFailures(failures));
   }
 
   return plan;

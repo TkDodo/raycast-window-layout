@@ -56,7 +56,7 @@ export default function Command() {
       toast.title = existing ? "Layout updated" : "Layout saved";
       toast.message = `${layout.windows.length} windows captured`;
     } catch (error) {
-      const message = error instanceof YabaiUnavailableError ? error.message : "Unexpected error";
+      const message = error instanceof Error ? error.message : "Unexpected error";
       toast.style = Toast.Style.Failure;
       toast.title = "Unable to save layout";
       toast.message = message;

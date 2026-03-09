@@ -300,4 +300,90 @@ describe("restoreLayout", () => {
     expect(moveWindowToSpace).toHaveBeenCalledWith(4357, 1);
     expect(resizeWindow).toHaveBeenCalledWith(4357, { x: 10, y: 20, w: 1200, h: 900 });
   });
+
+  it("retries with a freshly resolved window id when yabai says the target window disappeared mid-restore", async () => {
+    const planningSnapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 95,
+          uuid: "display-work",
+          index: 1,
+          frame: { x: 0, y: 0, w: 1728, h: 1117 },
+          spaces: [83],
+          label: "Studio Display",
+        },
+      ],
+      spaces: [{ id: 83, index: 1, display: 95 }],
+      windows: [
+        {
+          id: 95,
+          app: "Discord",
+          title: "TanStack - Discord",
+          display: 95,
+          space: 83,
+          frame: { x: 0, y: 0, w: 1000, h: 900 },
+        },
+      ],
+    };
+
+    const retrySnapshot: SystemSnapshot = {
+      ...planningSnapshot,
+      windows: [
+        {
+          id: 4357,
+          app: "Discord",
+          title: "TanStack - Discord",
+          display: 95,
+          space: 83,
+          frame: { x: 0, y: 0, w: 1000, h: 900 },
+        },
+      ],
+    };
+
+    const layout: SavedLayout = {
+      name: "Work",
+      createdAt: "2026-03-09T00:00:00.000Z",
+      updatedAt: "2026-03-09T00:00:00.000Z",
+      displays: [
+        {
+          uuid: "display-work",
+          arrangementIndex: 1,
+          frame: { x: 0, y: 0, w: 1728, h: 1117 },
+          label: "Studio Display",
+        },
+      ],
+      windows: [
+        {
+          id: "discord",
+          app: "Discord",
+          title: "TanStack - Discord",
+          matchMode: "app",
+          targetDisplayId: "display-work",
+          targetSpaceIndex: 1,
+          targetSpacePosition: 1,
+          targetFrame: { x: 10, y: 20, w: 1200, h: 900 },
+        },
+      ],
+    };
+
+    getSnapshot
+      .mockResolvedValueOnce(planningSnapshot)
+      .mockResolvedValueOnce(planningSnapshot)
+      .mockResolvedValueOnce(retrySnapshot);
+    moveWindowToDisplay
+      .mockRejectedValueOnce(
+        new Error(
+          "yabai command failed: could not locate the window to act on! Command failed: /opt/homebrew/bin/yabai -m window 95 --display 1 could not locate the window to act on!",
+        ),
+      )
+      .mockResolvedValueOnce(undefined);
+
+    const { restoreLayout } = await import("../src/restore");
+    await restoreLayout(layout);
+
+    expect(moveWindowToDisplay).toHaveBeenNthCalledWith(1, 95, 1);
+    expect(moveWindowToDisplay).toHaveBeenNthCalledWith(2, 4357, 1);
+    expect(moveWindowToSpace).toHaveBeenCalledWith(4357, 1);
+    expect(resizeWindow).toHaveBeenCalledWith(4357, { x: 10, y: 20, w: 1200, h: 900 });
+  });
 });
