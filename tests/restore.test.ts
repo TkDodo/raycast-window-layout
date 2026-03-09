@@ -6,6 +6,7 @@ const getSnapshot = vi.fn<() => Promise<SystemSnapshot>>();
 const moveWindowToDisplay = vi.fn();
 const moveWindowToSpace = vi.fn();
 const resizeWindow = vi.fn();
+const selectWindow = vi.fn();
 
 vi.mock("../src/yabai", () => ({
   createSpaceOnDisplay,
@@ -13,6 +14,7 @@ vi.mock("../src/yabai", () => ({
   moveWindowToDisplay,
   moveWindowToSpace,
   resizeWindow,
+  selectWindow,
 }));
 
 describe("restoreLayout", () => {
@@ -66,9 +68,10 @@ describe("restoreLayout", () => {
           id: "arc-dashboard",
           app: "Arc",
           title: "Dashboard",
-          matchMode: "app-title",
+          matchMode: "app",
           targetDisplayId: "display-work",
           targetSpaceIndex: 2,
+          targetSpacePosition: 2,
           targetFrame: { x: 10, y: 20, w: 1200, h: 900 },
         },
       ],
@@ -79,6 +82,7 @@ describe("restoreLayout", () => {
     const { restoreLayout } = await import("../src/restore");
     await restoreLayout(layout);
 
+    expect(selectWindow).toHaveBeenCalledWith(2548);
     expect(moveWindowToSpace).toHaveBeenCalledWith(2548, 2);
   });
 
@@ -124,9 +128,10 @@ describe("restoreLayout", () => {
           id: "arc-dashboard",
           app: "Arc",
           title: "Dashboard",
-          matchMode: "app-title",
+          matchMode: "app",
           targetDisplayId: "display-work",
           targetSpaceIndex: 1,
+          targetSpacePosition: 1,
           targetFrame: { x: 10, y: 20, w: 1200, h: 900 },
         },
       ],
@@ -137,6 +142,92 @@ describe("restoreLayout", () => {
     const { restoreLayout } = await import("../src/restore");
     await restoreLayout(layout);
 
+    expect(selectWindow).toHaveBeenCalledWith(2548);
     expect(moveWindowToDisplay).toHaveBeenCalledWith(2548, 1);
+  });
+
+  it("preserves global mission-control desktop indices across displays", async () => {
+    const snapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 10,
+          uuid: "built-in",
+          index: 1,
+          frame: { x: 0, y: 0, w: 1512, h: 982 },
+          spaces: [11],
+          label: "MacBook Pro",
+        },
+        {
+          id: 20,
+          uuid: "external-left",
+          index: 2,
+          frame: { x: 1512, y: 0, w: 1728, h: 1117 },
+          spaces: [12, 13, 14],
+          label: "Studio Display",
+        },
+        {
+          id: 30,
+          uuid: "external-right",
+          index: 3,
+          frame: { x: 3240, y: 0, w: 1728, h: 1117 },
+          spaces: [15, 16, 17],
+          label: "LG UltraFine",
+        },
+      ],
+      spaces: [
+        { id: 11, index: 1, display: 10 },
+        { id: 12, index: 2, display: 20 },
+        { id: 13, index: 3, display: 20 },
+        { id: 14, index: 4, display: 20 },
+        { id: 15, index: 5, display: 30 },
+        { id: 16, index: 6, display: 30 },
+        { id: 17, index: 7, display: 30 },
+      ],
+      windows: [
+        {
+          id: 3001,
+          app: "Arc",
+          title: "Docs",
+          display: 30,
+          space: 17,
+          frame: { x: 3300, y: 10, w: 1000, h: 900 },
+        },
+      ],
+    };
+
+    const layout: SavedLayout = {
+      name: "Desk Setup",
+      createdAt: "2026-03-09T00:00:00.000Z",
+      updatedAt: "2026-03-09T00:00:00.000Z",
+      displays: [
+        {
+          uuid: "external-right",
+          arrangementIndex: 3,
+          frame: { x: 3240, y: 0, w: 1728, h: 1117 },
+          label: "LG UltraFine",
+        },
+      ],
+      windows: [
+        {
+          id: "arc-docs",
+          app: "Arc",
+          title: "Docs",
+          matchMode: "app",
+          targetDisplayId: "external-right",
+          targetSpaceIndex: 7,
+          targetSpacePosition: 3,
+          targetFrame: { x: 3300, y: 10, w: 1000, h: 900 },
+        },
+      ],
+    };
+
+    getSnapshot.mockResolvedValue(snapshot);
+
+    const { restoreLayout } = await import("../src/restore");
+    await restoreLayout(layout);
+
+    expect(selectWindow).toHaveBeenCalledWith(3001);
+    expect(moveWindowToDisplay).toHaveBeenCalledWith(3001, 3);
+    expect(moveWindowToSpace).toHaveBeenCalledWith(3001, 7);
   });
 });

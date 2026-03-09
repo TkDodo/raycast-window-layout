@@ -1,4 +1,4 @@
-export type WindowMatchMode = "app-title";
+export type WindowMatchMode = "app";
 
 export interface Rect {
   x: number;
@@ -21,6 +21,7 @@ export interface SavedWindow {
   matchMode: WindowMatchMode;
   targetDisplayId: string;
   targetSpaceIndex: number;
+  targetSpacePosition: number;
   targetFrame: Rect;
 }
 
@@ -85,6 +86,7 @@ export interface PlannedWindowMove {
   targetDisplayId: number;
   targetDisplayIndex: number;
   targetSpaceIndex: number;
+  targetSpacePosition: number;
   targetFrame: Rect;
   matchedBy: "title" | "app";
 }

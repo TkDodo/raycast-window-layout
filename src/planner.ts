@@ -62,9 +62,11 @@ function rankWindowMatch(savedWindow: SavedWindow, candidate: YabaiWindow): { sc
   if (savedWindow.app !== candidate.app) {
     return { score: -1 };
   }
+
   if (savedWindow.title && candidate.title === savedWindow.title) {
-    return { score: 10, matchedBy: "title" };
+    return { score: 2, matchedBy: "title" };
   }
+
   return { score: 1, matchedBy: "app" };
 }
 
@@ -100,6 +102,7 @@ export function createRestorePlan(layout: SavedLayout, snapshot: SystemSnapshot)
       targetDisplayId: targetDisplay.id,
       targetDisplayIndex: targetDisplay.index,
       targetSpaceIndex: savedWindow.targetSpaceIndex,
+      targetSpacePosition: savedWindow.targetSpacePosition,
       targetFrame: savedWindow.targetFrame,
       matchedBy: match.matchedBy,
     });
@@ -113,7 +116,7 @@ export function createRestorePlan(layout: SavedLayout, snapshot: SystemSnapshot)
   const spacesToCreate = Array.from(displayMatches.values()).flatMap((currentDisplay) => {
     const savedSpaceCount = layout.windows
       .filter((window) => displayMatches.get(window.targetDisplayId)?.id === currentDisplay.id)
-      .reduce((max, window) => Math.max(max, window.targetSpaceIndex), 0);
+      .reduce((max, window) => Math.max(max, window.targetSpacePosition), 0);
 
     const existingCount = currentDisplay.spaces.length;
     if (savedSpaceCount <= existingCount) {

@@ -61,7 +61,8 @@ describe("createLayoutFromSnapshot", () => {
           title: "Dashboard",
           targetDisplayId: "display-work",
           targetSpaceIndex: 1,
-          matchMode: "app-title",
+          targetSpacePosition: 1,
+          matchMode: "app",
         }),
       ]),
     );
@@ -77,18 +78,20 @@ describe("createRestorePlan", () => {
           id: "arc",
           app: "Arc",
           title: "Dashboard",
-          matchMode: "app-title" as const,
+          matchMode: "app" as const,
           targetDisplayId: "display-work",
           targetSpaceIndex: 3,
+          targetSpacePosition: 3,
           targetFrame: { x: 50, y: 50, w: 1100, h: 900 },
         },
         {
           id: "slack",
           app: "Slack",
           title: "random",
-          matchMode: "app-title" as const,
+          matchMode: "app" as const,
           targetDisplayId: "display-laptop",
-          targetSpaceIndex: 1,
+          targetSpaceIndex: 3,
+          targetSpacePosition: 1,
           targetFrame: { x: 1800, y: 20, w: 700, h: 900 },
         },
       ],
@@ -124,11 +127,45 @@ describe("createRestorePlan", () => {
         matchedBy: "title",
         targetDisplayId: 1,
         targetSpaceIndex: 3,
+        targetSpacePosition: 3,
       }),
       expect.objectContaining({
         windowId: 201,
         matchedBy: "app",
         targetDisplayId: 2,
+        targetSpaceIndex: 3,
+        targetSpacePosition: 1,
+      }),
+    ]);
+    expect(plan.unmatchedSavedWindows).toHaveLength(0);
+  });
+
+  it("treats app name as the primary identity even when titles change", () => {
+    const layout = createLayoutFromSnapshot("Work", snapshot);
+    const current: SystemSnapshot = {
+      ...snapshot,
+      windows: [
+        {
+          ...snapshot.windows[0],
+          title: "A Different Brave Tab",
+        },
+        {
+          ...snapshot.windows[1],
+          title: "A Different Slack Channel",
+        },
+      ],
+    };
+
+    const plan = createRestorePlan(layout, current);
+
+    expect(plan.windowMoves).toEqual([
+      expect.objectContaining({
+        windowId: 101,
+        matchedBy: "app",
+      }),
+      expect.objectContaining({
+        windowId: 102,
+        matchedBy: "app",
       }),
     ]);
     expect(plan.unmatchedSavedWindows).toHaveLength(0);
