@@ -143,6 +143,57 @@ describe("createLayoutFromSnapshot", () => {
     );
   });
 
+  it("prefers the same-display mission-control index when space ids overlap with mission-control indices", () => {
+    const ambiguousSnapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 1,
+          uuid: "built-in",
+          index: 1,
+          frame: { x: 0, y: 0, w: 1512, h: 982 },
+          spaces: [101],
+          label: "MacBook Pro",
+        },
+        {
+          id: 3,
+          uuid: "wide",
+          index: 3,
+          frame: { x: 1512, y: -799, w: 3440, h: 1440 },
+          spaces: [6, 7, 8],
+          label: "Wide",
+        },
+      ],
+      spaces: [
+        { id: 101, index: 1, display: 1 },
+        { id: 6, index: 5, display: 3 },
+        { id: 7, index: 6, display: 3 },
+        { id: 8, index: 7, display: 3 },
+      ],
+      windows: [
+        {
+          id: 2000,
+          app: "SmartGit",
+          title: "sentry - SmartGit",
+          display: 3,
+          space: 7,
+          frame: { x: 1512, y: -774, w: 3440, h: 1415 },
+        },
+      ],
+    };
+
+    const layout = createLayoutFromSnapshot("Home", ambiguousSnapshot);
+
+    expect(layout.windows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          app: "SmartGit",
+          targetSpaceIndex: 7,
+          targetSpacePosition: 3,
+        }),
+      ]),
+    );
+  });
+
   it("skips windows that are present in yabai but not visible", () => {
     const hiddenSnapshot: SystemSnapshot = {
       ...snapshot,

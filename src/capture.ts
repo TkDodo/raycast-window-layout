@@ -4,8 +4,8 @@ const EXCLUDED_APPS = new Set(["Raycast"]);
 
 function resolveWindowSpace(snapshot: SystemSnapshot, displayId: number, windowSpaceRef: number) {
   return (
-    snapshot.spaces.find((space) => space.display === displayId && space.id === windowSpaceRef) ??
     snapshot.spaces.find((space) => space.display === displayId && space.index === windowSpaceRef) ??
+    snapshot.spaces.find((space) => space.display === displayId && space.id === windowSpaceRef) ??
     snapshot.spaces.find((space) => space.id === windowSpaceRef) ??
     snapshot.spaces.find((space) => space.index === windowSpaceRef)
   );
