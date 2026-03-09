@@ -4,13 +4,7 @@ import { promisify } from "node:util";
 import { SystemSnapshot, YabaiDisplay, YabaiSpace, YabaiWindow } from "./types";
 
 const execFileAsync = promisify(execFile);
-const YABAI_CANDIDATES = [
-  process.env.YABAI_PATH,
-  "yabai",
-  "/opt/homebrew/bin/yabai",
-  "/usr/local/bin/yabai",
-  "/opt/local/bin/yabai",
-].filter((value): value is string => Boolean(value));
+const DEFAULT_YABAI_CANDIDATES = ["/opt/homebrew/bin/yabai", "/usr/local/bin/yabai", "/opt/local/bin/yabai", "yabai"];
 
 export class YabaiUnavailableError extends Error {
   constructor(message = "yabai is not installed, not running, or not accessible from Raycast.") {
@@ -32,8 +26,12 @@ async function isExecutable(command: string): Promise<boolean> {
   }
 }
 
+export function getYabaiCandidates(envPath = process.env.YABAI_PATH): string[] {
+  return [envPath, ...DEFAULT_YABAI_CANDIDATES].filter((value): value is string => Boolean(value));
+}
+
 async function resolveYabaiBinary(): Promise<string> {
-  for (const candidate of YABAI_CANDIDATES) {
+  for (const candidate of getYabaiCandidates()) {
     if (await isExecutable(candidate)) {
       return candidate;
     }
