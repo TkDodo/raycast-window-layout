@@ -1,5 +1,7 @@
 import { SavedLayout, SystemSnapshot } from "./types";
 
+const EXCLUDED_APPS = new Set(["Raycast"]);
+
 function resolveWindowSpace(snapshot: SystemSnapshot, displayId: number, windowSpaceRef: number) {
   return (
     snapshot.spaces.find((space) => space.display === displayId && space.id === windowSpaceRef) ??
@@ -43,7 +45,13 @@ export function createLayoutFromSnapshot(name: string, snapshot: SystemSnapshot,
       label: display.label ?? `Display ${display.index}`,
     })),
     windows: snapshot.windows
-      .filter((window) => !window.isHidden && !window.isMinimized && window.isVisible !== false)
+      .filter(
+        (window) =>
+          !window.isHidden &&
+          !window.isMinimized &&
+          window.isVisible !== false &&
+          !EXCLUDED_APPS.has(window.app),
+      )
       .map((window, index) => ({
         id: `${window.app}:${window.display}:${window.space}:${index}`,
         app: window.app,

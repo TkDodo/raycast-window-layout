@@ -164,6 +164,27 @@ describe("createLayoutFromSnapshot", () => {
 
     expect(layout.windows.find((window) => window.app === "GitHub Desktop")).toBeUndefined();
   });
+
+  it("skips Raycast itself when saving layouts", () => {
+    const raycastSnapshot: SystemSnapshot = {
+      ...snapshot,
+      windows: [
+        ...snapshot.windows,
+        {
+          id: 104,
+          app: "Raycast",
+          title: "",
+          display: 1,
+          space: 1,
+          frame: { x: 200, y: 100, w: 750, h: 474 },
+        },
+      ],
+    };
+
+    const layout = createLayoutFromSnapshot("Home", raycastSnapshot);
+
+    expect(layout.windows.find((window) => window.app === "Raycast")).toBeUndefined();
+  });
 });
 
 describe("createRestorePlan", () => {
