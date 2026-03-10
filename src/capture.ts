@@ -31,7 +31,12 @@ function getMissionControlSpaceIndex(snapshot: SystemSnapshot, displayId: number
 
 export function createLayoutFromSnapshot(name: string, snapshot: SystemSnapshot, notes?: string): SavedLayout {
   const timestamp = new Date().toISOString();
-  const displaysById = new Map(snapshot.displays.map((display) => [display.id, display]));
+  const displaysByReference = new Map<number, (typeof snapshot.displays)[number]>();
+
+  for (const display of snapshot.displays) {
+    displaysByReference.set(display.id, display);
+    displaysByReference.set(display.index, display);
+  }
 
   return {
     name,
@@ -58,7 +63,7 @@ export function createLayoutFromSnapshot(name: string, snapshot: SystemSnapshot,
         title: window.title,
         matchMode: "app",
         targetDisplayId: (() => {
-          const display = displaysById.get(window.display);
+          const display = displaysByReference.get(window.display);
           if (!display) {
             return `${window.display}:${window.frame.w}x${window.frame.h}:Display ${window.display}`;
           }

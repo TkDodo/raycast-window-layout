@@ -194,6 +194,71 @@ describe("createLayoutFromSnapshot", () => {
     );
   });
 
+  it("uses the saved display uuid consistently when window.display matches the display index instead of the internal id", () => {
+    const indexAddressedSnapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 95,
+          uuid: "built-in",
+          index: 1,
+          frame: { x: 0, y: 0, w: 1512, h: 982 },
+          spaces: [101, 102],
+          label: "MacBook Pro",
+        },
+        {
+          id: 103,
+          uuid: "external-wide",
+          index: 2,
+          frame: { x: -3440, y: -511, w: 3440, h: 1440 },
+          spaces: [201, 202, 203, 204],
+          label: "Display 2",
+        },
+      ],
+      spaces: [
+        { id: 101, index: 1, display: 95 },
+        { id: 102, index: 2, display: 95 },
+        { id: 201, index: 3, display: 103 },
+        { id: 202, index: 4, display: 103 },
+        { id: 203, index: 5, display: 103 },
+        { id: 204, index: 6, display: 103 },
+      ],
+      windows: [
+        {
+          id: 1,
+          app: "Slack",
+          title: "DM",
+          display: 2,
+          space: 4,
+          frame: { x: -1720, y: -486, w: 1720, h: 1415 },
+        },
+        {
+          id: 2,
+          app: "Brave Browser",
+          title: "PR",
+          display: 2,
+          space: 3,
+          frame: { x: -3440, y: -486, w: 1719, h: 1415 },
+        },
+        {
+          id: 3,
+          app: "SmartGit",
+          title: "Repo",
+          display: 2,
+          space: 5,
+          frame: { x: -3440, y: -486, w: 3440, h: 1415 },
+        },
+      ],
+    };
+
+    const layout = createLayoutFromSnapshot("Sentry", indexAddressedSnapshot);
+
+    expect(layout.windows.map((window) => window.targetDisplayId)).toEqual([
+      "external-wide",
+      "external-wide",
+      "external-wide",
+    ]);
+  });
+
   it("skips windows that are present in yabai but not visible", () => {
     const hiddenSnapshot: SystemSnapshot = {
       ...snapshot,
