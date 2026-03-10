@@ -57,7 +57,7 @@ async function runWindowMoveSequence(windowId: number, move: PlannedWindowMove, 
 
   const targetSpace = getSpaceForDisplayAndPosition(spaces, move.targetDisplayId, move.targetSpacePosition);
   if (targetSpace) {
-    await moveWindowToSpace(windowId, move.targetSpaceIndex);
+    await moveWindowToSpace(windowId, targetSpace.index);
   }
 
   await resizeWindow(windowId, move.targetFrame);

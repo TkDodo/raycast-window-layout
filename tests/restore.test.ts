@@ -226,6 +226,71 @@ describe("restoreLayout", () => {
     expect(moveWindowToSpace).toHaveBeenCalledWith(3001, 7);
   });
 
+  it("moves windows to the current space at the saved per-display position when mission-control indices have shifted", async () => {
+    const snapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 20,
+          uuid: "external-wide",
+          index: 2,
+          frame: { x: -3440, y: -511, w: 3440, h: 1440 },
+          spaces: [201, 202, 203, 204],
+          label: "Display 2",
+        },
+      ],
+      spaces: [
+        { id: 201, index: 8, display: 20 },
+        { id: 202, index: 9, display: 20 },
+        { id: 203, index: 10, display: 20 },
+        { id: 204, index: 11, display: 20 },
+      ],
+      windows: [
+        {
+          id: 4001,
+          app: "Slack",
+          title: "DM",
+          display: 20,
+          space: 201,
+          frame: { x: -1720, y: -486, w: 1720, h: 1415 },
+        },
+      ],
+    };
+
+    const layout: SavedLayout = {
+      name: "Sentry",
+      createdAt: "2026-03-10T00:00:00.000Z",
+      updatedAt: "2026-03-10T00:00:00.000Z",
+      displays: [
+        {
+          uuid: "external-wide",
+          arrangementIndex: 2,
+          frame: { x: -3440, y: -511, w: 3440, h: 1440 },
+          label: "Display 2",
+        },
+      ],
+      windows: [
+        {
+          id: "slack-dm",
+          app: "Slack",
+          title: "DM",
+          matchMode: "app",
+          targetDisplayId: "external-wide",
+          targetSpaceIndex: 4,
+          targetSpacePosition: 2,
+          targetFrame: { x: -1720, y: -486, w: 1720, h: 1415 },
+        },
+      ],
+    };
+
+    getSnapshot.mockResolvedValue(snapshot);
+
+    const { restoreLayout } = await import("../src/restore");
+    await restoreLayout(layout);
+
+    expect(moveWindowToDisplay).toHaveBeenCalledWith(4001, 2);
+    expect(moveWindowToSpace).toHaveBeenCalledWith(4001, 9);
+  });
+
   it("re-resolves a window by app and title when the initial yabai window id goes stale", async () => {
     const planningSnapshot: SystemSnapshot = {
       displays: [
