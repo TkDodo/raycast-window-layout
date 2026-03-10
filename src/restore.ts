@@ -2,9 +2,14 @@ import { createRestorePlan } from "./planner";
 import { PlannedWindowMove, RestoreFailure, RestoreResult, SavedLayout, SystemSnapshot, YabaiSpace, YabaiWindow } from "./types";
 import { createSpaceOnDisplay, getSnapshot, moveWindowToDisplay, moveWindowToSpace, resizeWindow } from "./yabai";
 
-function getSpaceForDisplayAndPosition(spaces: YabaiSpace[], displayId: number, position: number): YabaiSpace | undefined {
+function getSpaceForDisplayAndPosition(
+  spaces: YabaiSpace[],
+  displayId: number,
+  displayIndex: number,
+  position: number,
+): YabaiSpace | undefined {
   return spaces
-    .filter((space) => space.display === displayId)
+    .filter((space) => space.display === displayId || space.display === displayIndex)
     .sort((left, right) => left.index - right.index)
     .at(position - 1);
 }
@@ -55,7 +60,7 @@ function isMissingWindowError(error: unknown): boolean {
 async function runWindowMoveSequence(windowId: number, move: PlannedWindowMove, spaces: YabaiSpace[]) {
   await moveWindowToDisplay(windowId, move.targetDisplayIndex);
 
-  const targetSpace = getSpaceForDisplayAndPosition(spaces, move.targetDisplayId, move.targetSpacePosition);
+  const targetSpace = getSpaceForDisplayAndPosition(spaces, move.targetDisplayId, move.targetDisplayIndex, move.targetSpacePosition);
   if (targetSpace) {
     await moveWindowToSpace(windowId, targetSpace.index);
   }

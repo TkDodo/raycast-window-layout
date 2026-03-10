@@ -291,6 +291,89 @@ describe("restoreLayout", () => {
     expect(moveWindowToSpace).toHaveBeenCalledWith(4001, 9);
   });
 
+  it("resolves target spaces even when yabai reports space.display using the display index instead of the internal id", async () => {
+    const snapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 103,
+          uuid: "external-wide",
+          index: 2,
+          frame: { x: -3440, y: -511, w: 3440, h: 1440 },
+          spaces: [201, 202, 203, 204],
+          label: "Display 2",
+        },
+      ],
+      spaces: [
+        { id: 201, index: 3, display: 2 },
+        { id: 202, index: 4, display: 2 },
+        { id: 203, index: 5, display: 2 },
+        { id: 204, index: 6, display: 2 },
+      ],
+      windows: [
+        {
+          id: 4101,
+          app: "Slack",
+          title: "DM",
+          display: 103,
+          space: 201,
+          frame: { x: -1720, y: -486, w: 1720, h: 1415 },
+        },
+        {
+          id: 4102,
+          app: "Discord",
+          title: "TanStack",
+          display: 103,
+          space: 201,
+          frame: { x: -3440, y: -486, w: 1720, h: 1415 },
+        },
+      ],
+    };
+
+    const layout: SavedLayout = {
+      name: "Sentry",
+      createdAt: "2026-03-10T00:00:00.000Z",
+      updatedAt: "2026-03-10T00:00:00.000Z",
+      displays: [
+        {
+          uuid: "external-wide",
+          arrangementIndex: 2,
+          frame: { x: -3440, y: -511, w: 3440, h: 1440 },
+          label: "Display 2",
+        },
+      ],
+      windows: [
+        {
+          id: "slack-dm",
+          app: "Slack",
+          title: "DM",
+          matchMode: "app",
+          targetDisplayId: "external-wide",
+          targetSpaceIndex: 4,
+          targetSpacePosition: 2,
+          targetFrame: { x: -1720, y: -486, w: 1720, h: 1415 },
+        },
+        {
+          id: "discord",
+          app: "Discord",
+          title: "TanStack",
+          matchMode: "app",
+          targetDisplayId: "external-wide",
+          targetSpaceIndex: 6,
+          targetSpacePosition: 4,
+          targetFrame: { x: -3440, y: -486, w: 1720, h: 1415 },
+        },
+      ],
+    };
+
+    getSnapshot.mockResolvedValue(snapshot);
+
+    const { restoreLayout } = await import("../src/restore");
+    await restoreLayout(layout);
+
+    expect(moveWindowToSpace).toHaveBeenNthCalledWith(1, 4101, 4);
+    expect(moveWindowToSpace).toHaveBeenNthCalledWith(2, 4102, 6);
+  });
+
   it("re-resolves a window by app and title when the initial yabai window id goes stale", async () => {
     const planningSnapshot: SystemSnapshot = {
       displays: [
