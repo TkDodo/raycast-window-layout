@@ -1,6 +1,17 @@
 import { createRestorePlan } from "./planner";
-import { PlannedWindowMove, RestoreFailure, RestoreResult, SavedLayout, SystemSnapshot, YabaiSpace, YabaiWindow } from "./types";
-import { createSpaceOnDisplay, getSnapshot, moveWindowToDisplay, moveWindowToSpace, resizeWindow } from "./yabai";
+import {
+  PlannedSpaceCreation,
+  PlannedWindowMove,
+  RestoreFailure,
+  RestoreResult,
+  RestoredWindowMove,
+  SavedLayout,
+  SystemSnapshot,
+  YabaiDisplay,
+  YabaiSpace,
+  YabaiWindow,
+} from "./types";
+import { getSnapshot, moveWindowToDisplay, moveWindowToSpace, resizeWindow } from "./yabai";
 
 function getSpaceForDisplayAndPosition(
   spaces: YabaiSpace[],
@@ -12,23 +23,6 @@ function getSpaceForDisplayAndPosition(
     .filter((space) => space.display === displayId || space.display === displayIndex)
     .sort((left, right) => left.index - right.index)
     .at(position - 1);
-}
-
-async function ensureSpaces(snapshot: SystemSnapshot, layout: SavedLayout) {
-  const initialPlan = createRestorePlan(layout, snapshot);
-
-  for (const item of initialPlan.spacesToCreate) {
-    const missingCount = item.requiredCount - item.existingCount;
-    for (let i = 0; i < missingCount; i += 1) {
-      await createSpaceOnDisplay(item.displayId);
-    }
-  }
-
-  if (initialPlan.spacesToCreate.length > 0) {
-    return getSnapshot();
-  }
-
-  return snapshot;
 }
 
 function findCurrentWindowForMove(
@@ -57,15 +51,53 @@ function isMissingWindowError(error: unknown): boolean {
   return error instanceof Error && error.message.includes("could not locate the window to act on");
 }
 
-async function runWindowMoveSequence(windowId: number, move: PlannedWindowMove, spaces: YabaiSpace[]) {
+function findDisplay(displays: YabaiDisplay[], displayRef: number): YabaiDisplay | undefined {
+  return displays.find((display) => display.id === displayRef || display.index === displayRef);
+}
+
+function resolveWindowSpace(snapshot: SystemSnapshot, window: YabaiWindow): YabaiSpace | undefined {
+  const currentDisplay = findDisplay(snapshot.displays, window.display);
+  const displayId = currentDisplay?.id ?? window.display;
+  const displayIndex = currentDisplay?.index ?? window.display;
+
+  return (
+    snapshot.spaces.find((space) => (space.display === displayId || space.display === displayIndex) && space.index === window.space) ??
+    snapshot.spaces.find((space) => (space.display === displayId || space.display === displayIndex) && space.id === window.space) ??
+    snapshot.spaces.find((space) => space.id === window.space) ??
+    snapshot.spaces.find((space) => space.index === window.space)
+  );
+}
+
+async function runWindowMoveSequence(
+  windowId: number,
+  move: PlannedWindowMove,
+  snapshot: SystemSnapshot,
+): Promise<RestoredWindowMove> {
   await moveWindowToDisplay(windowId, move.targetDisplayIndex);
 
-  const targetSpace = getSpaceForDisplayAndPosition(spaces, move.targetDisplayId, move.targetDisplayIndex, move.targetSpacePosition);
+  const currentWindow = snapshot.windows.find((window) => window.id === windowId);
+  const currentDisplay = currentWindow ? findDisplay(snapshot.displays, currentWindow.display) : undefined;
+  const currentSpace = currentWindow ? resolveWindowSpace(snapshot, currentWindow) : undefined;
+  const targetSpace = getSpaceForDisplayAndPosition(snapshot.spaces, move.targetDisplayId, move.targetDisplayIndex, move.targetSpacePosition);
   if (targetSpace) {
     await moveWindowToSpace(windowId, targetSpace.index);
   }
 
   await resizeWindow(windowId, move.targetFrame);
+
+  return {
+    windowId,
+    app: move.app,
+    title: move.title,
+    matchedBy: move.matchedBy,
+    fromDisplayIndex: currentDisplay?.index ?? null,
+    fromSpaceIndex: currentSpace?.index ?? null,
+    toDisplayIndex: move.targetDisplayIndex,
+    toSpaceIndex: targetSpace?.index ?? null,
+    changedDesktop:
+      currentDisplay?.index !== move.targetDisplayIndex ||
+      currentSpace?.index !== (targetSpace?.index ?? null),
+  };
 }
 
 function formatFailureLabel(failure: RestoreFailure): string {
@@ -80,6 +112,17 @@ function toRestoreFailure(move: PlannedWindowMove, error: unknown): RestoreFailu
   };
 }
 
+function toMissingDesktopFailure(move: PlannedWindowMove, blocker: PlannedSpaceCreation): RestoreFailure {
+  const missingCount = blocker.requiredCount - blocker.existingCount;
+  const desktopLabel = missingCount === 1 ? "desktop" : "desktops";
+
+  return {
+    app: move.app,
+    title: move.title,
+    reason: `Display ${move.targetDisplayIndex} is missing ${missingCount} ${desktopLabel}. Saved layout needs ${blocker.requiredCount} desktops there, but only ${blocker.existingCount} exist.`,
+  };
+}
+
 export function formatRestoreFailures(failures: RestoreFailure[]): string {
   const summary = failures.map((failure) => `- ${formatFailureLabel(failure)}`).join("\n");
   const details = failures
@@ -89,14 +132,64 @@ export function formatRestoreFailures(failures: RestoreFailure[]): string {
   return [`Skipped ${failures.length} window${failures.length === 1 ? "" : "s"} during restore:`, summary, "", details].join("\n");
 }
 
+function formatMoveLabel(move: RestoredWindowMove): string {
+  return move.app;
+}
+
+export function formatRestoreMoves(moves: RestoredWindowMove[]): string {
+  const moved = moves.filter((move) => move.changedDesktop);
+  const unchanged = moves.filter((move) => !move.changedDesktop);
+  const sections: string[] = [];
+
+  if (moved.length > 0) {
+    sections.push(
+      "Moved",
+      ...moved.map((move) => {
+        const fromDisplay = move.fromDisplayIndex ?? "?";
+        const fromSpace = move.fromSpaceIndex ?? "?";
+        const toSpace = move.toSpaceIndex ?? "?";
+
+        return `- ${formatMoveLabel(move)} -> display ${move.toDisplayIndex}, desktop ${toSpace} (from display ${fromDisplay}, desktop ${fromSpace})`;
+      }),
+    );
+  }
+
+  if (unchanged.length > 0) {
+    if (sections.length > 0) {
+      sections.push("");
+    }
+
+    sections.push(
+      "Already Correct",
+      ...unchanged.map((move) => {
+        const toSpace = move.toSpaceIndex ?? "?";
+        return `- ${formatMoveLabel(move)} didn't move (display ${move.toDisplayIndex}, desktop ${toSpace})`;
+      }),
+    );
+  }
+
+  if (sections.length === 0) {
+    return "No windows were restored.";
+  }
+
+  return sections.join("\n");
+}
+
 export async function restoreLayout(layout: SavedLayout): Promise<RestoreResult> {
   const initialSnapshot = await getSnapshot();
-  const hydratedSnapshot = await ensureSpaces(initialSnapshot, layout);
-  const plan = createRestorePlan(layout, hydratedSnapshot);
+  const plan = createRestorePlan(layout, initialSnapshot);
   const usedWindowIds = new Set<number>();
   const failures: RestoreFailure[] = [];
+  const moves: RestoredWindowMove[] = [];
+  const blockedDisplays = new Map(plan.spacesToCreate.map((item) => [item.displayId, item]));
 
   for (const move of plan.windowMoves) {
+    const blocker = blockedDisplays.get(move.targetDisplayId);
+    if (blocker && move.targetSpacePosition > blocker.existingCount) {
+      failures.push(toMissingDesktopFailure(move, blocker));
+      continue;
+    }
+
     const currentSnapshot = await getSnapshot();
     const currentWindow = findCurrentWindowForMove(move, currentSnapshot, usedWindowIds);
     if (!currentWindow) {
@@ -105,7 +198,7 @@ export async function restoreLayout(layout: SavedLayout): Promise<RestoreResult>
 
     usedWindowIds.add(currentWindow.id);
     try {
-      await runWindowMoveSequence(currentWindow.id, move, hydratedSnapshot.spaces);
+      moves.push(await runWindowMoveSequence(currentWindow.id, move, currentSnapshot));
     } catch (error) {
       if (!isMissingWindowError(error)) {
         failures.push(toRestoreFailure(move, error));
@@ -122,7 +215,7 @@ export async function restoreLayout(layout: SavedLayout): Promise<RestoreResult>
 
       usedWindowIds.add(retryWindow.id);
       try {
-        await runWindowMoveSequence(retryWindow.id, move, hydratedSnapshot.spaces);
+        moves.push(await runWindowMoveSequence(retryWindow.id, move, retrySnapshot));
       } catch (retryError) {
         failures.push(toRestoreFailure(move, retryError));
       }
@@ -130,5 +223,5 @@ export async function restoreLayout(layout: SavedLayout): Promise<RestoreResult>
     }
   }
 
-  return {plan, failures};
+  return {plan, failures, moves};
 }

@@ -374,6 +374,75 @@ describe("restoreLayout", () => {
     expect(moveWindowToSpace).toHaveBeenNthCalledWith(2, 4102, 6);
   });
 
+  it("reports missing desktops as blockers instead of trying to create spaces", async () => {
+    const snapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 20,
+          uuid: "external-wide",
+          index: 2,
+          frame: { x: -3440, y: -511, w: 3440, h: 1440 },
+          spaces: [201, 202],
+          label: "Display 2",
+        },
+      ],
+      spaces: [
+        { id: 201, index: 5, display: 20 },
+        { id: 202, index: 6, display: 20 },
+      ],
+      windows: [
+        {
+          id: 4201,
+          app: "SmartGit",
+          title: "Repo",
+          display: 20,
+          space: 201,
+          frame: { x: -3440, y: -486, w: 3440, h: 1415 },
+        },
+      ],
+    };
+
+    const layout: SavedLayout = {
+      name: "Home",
+      createdAt: "2026-03-12T00:00:00.000Z",
+      updatedAt: "2026-03-12T00:00:00.000Z",
+      displays: [
+        {
+          uuid: "external-wide",
+          arrangementIndex: 2,
+          frame: { x: -3440, y: -511, w: 3440, h: 1440 },
+          label: "Display 2",
+        },
+      ],
+      windows: [
+        {
+          id: "smartgit",
+          app: "SmartGit",
+          title: "Repo",
+          matchMode: "app",
+          targetDisplayId: "external-wide",
+          targetSpaceIndex: 7,
+          targetSpacePosition: 3,
+          targetFrame: { x: -3440, y: -486, w: 3440, h: 1415 },
+        },
+      ],
+    };
+
+    getSnapshot.mockResolvedValue(snapshot);
+
+    const { restoreLayout } = await import("../src/restore");
+    const result = await restoreLayout(layout);
+
+    expect(createSpaceOnDisplay).not.toHaveBeenCalled();
+    expect(moveWindowToDisplay).not.toHaveBeenCalled();
+    expect(result.failures).toEqual([
+      expect.objectContaining({
+        app: "SmartGit",
+        reason: "Display 2 is missing 1 desktop. Saved layout needs 3 desktops there, but only 2 exist.",
+      }),
+    ]);
+  });
+
   it("re-resolves a window by app and title when the initial yabai window id goes stale", async () => {
     const planningSnapshot: SystemSnapshot = {
       displays: [

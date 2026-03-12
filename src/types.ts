@@ -106,7 +106,20 @@ export interface RestoreFailure {
   reason: string;
 }
 
+export interface RestoredWindowMove {
+  windowId: number;
+  app: string;
+  title: string;
+  matchedBy: "title" | "app";
+  fromDisplayIndex: number | null;
+  fromSpaceIndex: number | null;
+  toDisplayIndex: number;
+  toSpaceIndex: number | null;
+  changedDesktop: boolean;
+}
+
 export interface RestoreResult {
   plan: RestorePlan;
   failures: RestoreFailure[];
+  moves: RestoredWindowMove[];
 }

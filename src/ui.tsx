@@ -66,3 +66,19 @@ export function ErrorDetail(props: { title: string; error: string; onBack?: () =
     />
   );
 }
+
+export function ReportDetail(props: { title: string; report: string; onBack?: () => void }) {
+  const markdown = [`# ${props.title}`, "", "```text", props.report, "```"].join("\n");
+
+  return (
+    <Detail
+      markdown={markdown}
+      actions={
+        <ActionPanel>
+          <Action.CopyToClipboard title="Copy Report" content={props.report} />
+          {props.onBack ? <Action title="Back" icon={Icon.ArrowLeft} onAction={props.onBack} /> : null}
+        </ActionPanel>
+      }
+    />
+  );
+}
