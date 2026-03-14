@@ -18,7 +18,11 @@ vi.mock("../src/yabai", () => ({
 describe("restoreLayout", () => {
   beforeEach(() => {
     vi.resetModules();
-    vi.clearAllMocks();
+    createSpaceOnDisplay.mockReset();
+    getSnapshot.mockReset();
+    moveWindowToDisplay.mockReset();
+    moveWindowToSpace.mockReset();
+    resizeWindow.mockReset();
   });
 
   it("moves windows using the target space mission-control index, not the internal yabai id", async () => {
@@ -441,6 +445,98 @@ describe("restoreLayout", () => {
         reason: "Display 2 is missing 1 desktop. Saved layout needs 3 desktops there, but only 2 exist.",
       }),
     ]);
+  });
+
+  it("replans once more during the same restore run so windows that appear after earlier moves are still restored", async () => {
+    const initialSnapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 20,
+          uuid: "external-wide",
+          index: 2,
+          frame: { x: -3440, y: -511, w: 3440, h: 1440 },
+          spaces: [201, 202],
+          label: "Display 2",
+        },
+      ],
+      spaces: [
+        { id: 201, index: 5, display: 20 },
+        { id: 202, index: 6, display: 20 },
+      ],
+      windows: [
+        {
+          id: 4301,
+          app: "Slack",
+          title: "DM",
+          display: 20,
+          space: 201,
+          frame: { x: -1720, y: -486, w: 1720, h: 1415 },
+        },
+      ],
+    };
+
+    const settledSnapshot: SystemSnapshot = {
+      ...initialSnapshot,
+      windows: [
+        initialSnapshot.windows[0],
+        {
+          id: 4302,
+          app: "Discord",
+          title: "TanStack",
+          display: 20,
+          space: 201,
+          frame: { x: -3440, y: -486, w: 1720, h: 1415 },
+        },
+      ],
+    };
+
+    const layout: SavedLayout = {
+      name: "Home",
+      createdAt: "2026-03-12T00:00:00.000Z",
+      updatedAt: "2026-03-12T00:00:00.000Z",
+      displays: [
+        {
+          uuid: "external-wide",
+          arrangementIndex: 2,
+          frame: { x: -3440, y: -511, w: 3440, h: 1440 },
+          label: "Display 2",
+        },
+      ],
+      windows: [
+        {
+          id: "slack",
+          app: "Slack",
+          title: "DM",
+          matchMode: "app",
+          targetDisplayId: "external-wide",
+          targetSpaceIndex: 5,
+          targetSpacePosition: 1,
+          targetFrame: { x: -1720, y: -486, w: 1720, h: 1415 },
+        },
+        {
+          id: "discord",
+          app: "Discord",
+          title: "TanStack",
+          matchMode: "app",
+          targetDisplayId: "external-wide",
+          targetSpaceIndex: 6,
+          targetSpacePosition: 2,
+          targetFrame: { x: -3440, y: -486, w: 1720, h: 1415 },
+        },
+      ],
+    };
+
+    getSnapshot
+      .mockResolvedValueOnce(initialSnapshot)
+      .mockResolvedValueOnce(initialSnapshot)
+      .mockResolvedValueOnce(settledSnapshot)
+      .mockResolvedValue(settledSnapshot);
+
+    const { restoreLayout } = await import("../src/restore");
+    await restoreLayout(layout);
+
+    expect(moveWindowToSpace).toHaveBeenCalledWith(4301, 5);
+    expect(moveWindowToSpace).toHaveBeenCalledWith(4302, 6);
   });
 
   it("re-resolves a window by app and title when the initial yabai window id goes stale", async () => {

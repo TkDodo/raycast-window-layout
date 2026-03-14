@@ -81,6 +81,7 @@ export interface PlannedSpaceCreation {
 }
 
 export interface PlannedWindowMove {
+  savedWindowId: string;
   windowId: number;
   app: string;
   title: string;
@@ -122,4 +123,20 @@ export interface RestoreResult {
   plan: RestorePlan;
   failures: RestoreFailure[];
   moves: RestoredWindowMove[];
+}
+
+export interface RestoreReportItem {
+  title: string;
+  subtitle: string;
+  details?: string;
+  tint: "red" | "green" | "white";
+}
+
+export interface RestoreReportSection {
+  title: string;
+  items: RestoreReportItem[];
+}
+
+export interface RestoreReport {
+  sections: RestoreReportSection[];
 }

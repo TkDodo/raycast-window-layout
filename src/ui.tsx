@@ -1,6 +1,6 @@
 import { Action, ActionPanel, Alert, Clipboard, Color, Detail, Icon, List, Toast, confirmAlert, showToast } from "@raycast/api";
 import { ReactNode } from "react";
-import { SavedLayout } from "./types";
+import { RestoreReport, SavedLayout } from "./types";
 
 export function EmptyState(props: { title: string; description: string; action?: ReactNode }) {
   return (
@@ -18,14 +18,6 @@ export function layoutAccessories(layout: SavedLayout): List.Item.Accessory[] {
     { icon: Icon.Desktop, text: `${layout.displays.length} displays` },
     { tag: { value: new Date(layout.updatedAt).toLocaleDateString(), color: Color.SecondaryText } },
   ];
-}
-
-export async function showSuccess(title: string, message: string) {
-  await showToast({ style: Toast.Style.Success, title, message });
-}
-
-export async function showFailure(title: string, message: string) {
-  await showToast({ style: Toast.Style.Failure, title, message });
 }
 
 export async function confirmDelete(name: string) {
@@ -67,18 +59,43 @@ export function ErrorDetail(props: { title: string; error: string; onBack?: () =
   );
 }
 
-export function ReportDetail(props: { title: string; report: string; onBack?: () => void }) {
-  const markdown = [`# ${props.title}`, "", "```text", props.report, "```"].join("\n");
+function iconForTint(tint: "red" | "green" | "white") {
+  if (tint === "red") {
+    return { source: Icon.XMarkCircle, tintColor: Color.Red };
+  }
 
+  if (tint === "green") {
+    return { source: Icon.CheckCircle, tintColor: Color.Green };
+  }
+
+  return { source: Icon.Circle, tintColor: Color.SecondaryText };
+}
+
+export function RestoreReportList(props: { title: string; report: RestoreReport; onBack?: () => void }) {
   return (
-    <Detail
-      markdown={markdown}
-      actions={
-        <ActionPanel>
-          <Action.CopyToClipboard title="Copy Report" content={props.report} />
-          {props.onBack ? <Action title="Back" icon={Icon.ArrowLeft} onAction={props.onBack} /> : null}
-        </ActionPanel>
-      }
-    />
+    <List navigationTitle={props.title}>
+      {props.report.sections.map((section) => (
+        <List.Section key={section.title} title={section.title}>
+          {section.items.map((item, index) => (
+            <List.Item
+              key={`${section.title}-${item.title}-${index}`}
+              icon={iconForTint(item.tint)}
+              title={item.title}
+              subtitle={item.subtitle}
+              accessories={item.details ? [{ text: item.details }] : undefined}
+              actions={
+                <ActionPanel>
+                  <Action.CopyToClipboard
+                    title="Copy Entry"
+                    content={[item.title, item.subtitle, item.details].filter(Boolean).join("\n")}
+                  />
+                  {props.onBack ? <Action title="Back" icon={Icon.ArrowLeft} onAction={props.onBack} /> : null}
+                </ActionPanel>
+              }
+            />
+          ))}
+        </List.Section>
+      ))}
+    </List>
   );
 }

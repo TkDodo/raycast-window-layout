@@ -3,6 +3,8 @@ import {
   PlannedSpaceCreation,
   PlannedWindowMove,
   RestoreFailure,
+  RestoreReport,
+  RestoreReportItem,
   RestoreResult,
   RestoredWindowMove,
   SavedLayout,
@@ -123,105 +125,171 @@ function toMissingDesktopFailure(move: PlannedWindowMove, blocker: PlannedSpaceC
   };
 }
 
-export function formatRestoreFailures(failures: RestoreFailure[]): string {
-  const summary = failures.map((failure) => `- ${formatFailureLabel(failure)}`).join("\n");
-  const details = failures
-    .map((failure) => `${formatFailureLabel(failure)}: ${failure.reason}`)
-    .join("\n\n");
-
-  return [`Skipped ${failures.length} window${failures.length === 1 ? "" : "s"} during restore:`, summary, "", details].join("\n");
-}
-
 function formatMoveLabel(move: RestoredWindowMove): string {
   return move.app;
 }
 
-export function formatRestoreMoves(moves: RestoredWindowMove[]): string {
+function toProblemItem(failure: RestoreFailure): RestoreReportItem {
+  return {
+    title: formatFailureLabel(failure),
+    subtitle: failure.reason,
+    tint: "red",
+  };
+}
+
+function toMovedItem(move: RestoredWindowMove): RestoreReportItem {
+  const fromDisplay = move.fromDisplayIndex ?? "?";
+  const fromSpace = move.fromSpaceIndex ?? "?";
+  const toSpace = move.toSpaceIndex ?? "?";
+
+  return {
+    title: formatMoveLabel(move),
+    subtitle: `display ${fromDisplay}, desktop ${fromSpace} -> display ${move.toDisplayIndex}, desktop ${toSpace}`,
+    details: `Matched by ${move.matchedBy}`,
+    tint: "green",
+  };
+}
+
+function toUnchangedItem(move: RestoredWindowMove): RestoreReportItem {
+  const toSpace = move.toSpaceIndex ?? "?";
+
+  return {
+    title: formatMoveLabel(move),
+    subtitle: `didn't move (display ${move.toDisplayIndex}, desktop ${toSpace})`,
+    details: `Matched by ${move.matchedBy}`,
+    tint: "white",
+  };
+}
+
+export function buildRestoreReport(
+  failures: RestoreFailure[],
+  moves: RestoredWindowMove[],
+  missingApps: string[],
+): RestoreReport {
   const moved = moves.filter((move) => move.changedDesktop);
   const unchanged = moves.filter((move) => !move.changedDesktop);
-  const sections: string[] = [];
+  const sections = [];
+
+  if (failures.length > 0) {
+    sections.push({
+      title: "Problems",
+      items: failures.map(toProblemItem),
+    });
+  }
 
   if (moved.length > 0) {
-    sections.push(
-      "Moved",
-      ...moved.map((move) => {
-        const fromDisplay = move.fromDisplayIndex ?? "?";
-        const fromSpace = move.fromSpaceIndex ?? "?";
-        const toSpace = move.toSpaceIndex ?? "?";
-
-        return `- ${formatMoveLabel(move)} -> display ${move.toDisplayIndex}, desktop ${toSpace} (from display ${fromDisplay}, desktop ${fromSpace})`;
-      }),
-    );
+    sections.push({
+      title: "Moved",
+      items: moved.map(toMovedItem),
+    });
   }
 
   if (unchanged.length > 0) {
-    if (sections.length > 0) {
-      sections.push("");
-    }
-
-    sections.push(
-      "Already Correct",
-      ...unchanged.map((move) => {
-        const toSpace = move.toSpaceIndex ?? "?";
-        return `- ${formatMoveLabel(move)} didn't move (display ${move.toDisplayIndex}, desktop ${toSpace})`;
-      }),
-    );
+    sections.push({
+      title: "Already Correct",
+      items: unchanged.map(toUnchangedItem),
+    });
   }
 
-  if (sections.length === 0) {
-    return "No windows were restored.";
+  if (missingApps.length > 0) {
+    sections.push({
+      title: "Missing",
+      items: missingApps.map((app) => ({
+        title: app,
+        subtitle: "Not currently open",
+        tint: "white" as const,
+      })),
+    });
   }
 
-  return sections.join("\n");
+  return { sections };
 }
 
 export async function restoreLayout(layout: SavedLayout): Promise<RestoreResult> {
-  const initialSnapshot = await getSnapshot();
-  const plan = createRestorePlan(layout, initialSnapshot);
-  const usedWindowIds = new Set<number>();
+  const handledSavedWindowIds = new Set<string>();
   const failures: RestoreFailure[] = [];
   const moves: RestoredWindowMove[] = [];
-  const blockedDisplays = new Map(plan.spacesToCreate.map((item) => [item.displayId, item]));
+  let latestPlan: ReturnType<typeof createRestorePlan> = {
+    displayMatches: [],
+    spacesToCreate: [],
+    windowMoves: [],
+    unmatchedSavedWindows: layout.windows,
+    unmatchedCurrentWindows: [],
+  };
 
-  for (const move of plan.windowMoves) {
-    const blocker = blockedDisplays.get(move.targetDisplayId);
-    if (blocker && move.targetSpacePosition > blocker.existingCount) {
-      failures.push(toMissingDesktopFailure(move, blocker));
-      continue;
+  for (let pass = 0; pass < 2; pass += 1) {
+    const remainingLayout: SavedLayout = {
+      ...layout,
+      windows: layout.windows.filter((window) => !handledSavedWindowIds.has(window.id)),
+    };
+
+    if (remainingLayout.windows.length === 0) {
+      break;
     }
 
-    const currentSnapshot = await getSnapshot();
-    const currentWindow = findCurrentWindowForMove(move, currentSnapshot, usedWindowIds);
-    if (!currentWindow) {
-      continue;
+    const passSnapshot = await getSnapshot();
+    const plan = createRestorePlan(remainingLayout, passSnapshot);
+    latestPlan = plan;
+
+    if (plan.windowMoves.length === 0) {
+      break;
     }
 
-    usedWindowIds.add(currentWindow.id);
-    try {
-      moves.push(await runWindowMoveSequence(currentWindow.id, move, currentSnapshot));
-    } catch (error) {
-      if (!isMissingWindowError(error)) {
-        failures.push(toRestoreFailure(move, error));
+    const usedWindowIds = new Set<number>();
+    const blockedDisplays = new Map(plan.spacesToCreate.map((item) => [item.displayId, item]));
+    let progressed = false;
+
+    for (const move of plan.windowMoves) {
+      const blocker = blockedDisplays.get(move.targetDisplayId);
+      if (blocker && move.targetSpacePosition > blocker.existingCount) {
+        failures.push(toMissingDesktopFailure(move, blocker));
+        handledSavedWindowIds.add(move.savedWindowId);
         continue;
       }
 
-      usedWindowIds.delete(currentWindow.id);
-      const retrySnapshot = await getSnapshot();
-      const retryWindow = findCurrentWindowForMove(move, retrySnapshot, usedWindowIds);
-      if (!retryWindow || retryWindow.id === currentWindow.id) {
-        failures.push(toRestoreFailure(move, error));
+      const currentSnapshot = await getSnapshot();
+      const currentWindow = findCurrentWindowForMove(move, currentSnapshot, usedWindowIds);
+      if (!currentWindow) {
         continue;
       }
 
-      usedWindowIds.add(retryWindow.id);
+      usedWindowIds.add(currentWindow.id);
       try {
-        moves.push(await runWindowMoveSequence(retryWindow.id, move, retrySnapshot));
-      } catch (retryError) {
-        failures.push(toRestoreFailure(move, retryError));
+        moves.push(await runWindowMoveSequence(currentWindow.id, move, currentSnapshot));
+        handledSavedWindowIds.add(move.savedWindowId);
+        progressed = true;
+      } catch (error) {
+        if (!isMissingWindowError(error)) {
+          failures.push(toRestoreFailure(move, error));
+          handledSavedWindowIds.add(move.savedWindowId);
+          continue;
+        }
+
+        usedWindowIds.delete(currentWindow.id);
+        const retrySnapshot = await getSnapshot();
+        const retryWindow = findCurrentWindowForMove(move, retrySnapshot, usedWindowIds);
+        if (!retryWindow || retryWindow.id === currentWindow.id) {
+          failures.push(toRestoreFailure(move, error));
+          handledSavedWindowIds.add(move.savedWindowId);
+          continue;
+        }
+
+        usedWindowIds.add(retryWindow.id);
+        try {
+          moves.push(await runWindowMoveSequence(retryWindow.id, move, retrySnapshot));
+          handledSavedWindowIds.add(move.savedWindowId);
+          progressed = true;
+        } catch (retryError) {
+          failures.push(toRestoreFailure(move, retryError));
+          handledSavedWindowIds.add(move.savedWindowId);
+        }
       }
-      continue;
+    }
+
+    if (!progressed) {
+      break;
     }
   }
 
-  return {plan, failures, moves};
+  return {plan: latestPlan, failures, moves};
 }

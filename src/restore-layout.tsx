@@ -1,9 +1,9 @@
 import { Action, ActionPanel, Icon, List, Toast, showToast } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { getLayouts } from "./layout-store";
-import { formatRestoreFailures, formatRestoreMoves, restoreLayout } from "./restore";
-import { SavedLayout } from "./types";
-import { EmptyState, ErrorDetail, ReportDetail, layoutAccessories } from "./ui";
+import { buildRestoreReport, restoreLayout } from "./restore";
+import { RestoreReport, SavedLayout } from "./types";
+import { EmptyState, ErrorDetail, RestoreReportList, layoutAccessories } from "./ui";
 import { formatYabaiRequirementHint } from "./yabai-errors";
 import { ensureYabai } from "./yabai";
 
@@ -12,7 +12,7 @@ export default function Command() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reportTitle, setReportTitle] = useState("Restore failed");
-  const [report, setReport] = useState<string | null>(null);
+  const [report, setReport] = useState<RestoreReport | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -35,36 +35,23 @@ export default function Command() {
 
     try {
       const result = await restoreLayout(layout);
-      const movesReport = formatRestoreMoves(result.moves);
-      const missingSummary =
-        result.plan.unmatchedSavedWindows.length > 0
-          ? `Missing apps/windows from saved layout: ${result.plan.unmatchedSavedWindows
-              .map((window) => window.app)
-              .join(", ")}`
-          : "";
+      const missingApps = Array.from(new Set(result.plan.unmatchedSavedWindows.map((window) => window.app)));
+      const reportData = buildRestoreReport(result.failures, result.moves, missingApps);
 
       if (result.failures.length > 0) {
         toast.style = Toast.Style.Success;
         toast.title = `Restored ${layout.name} with skips`;
-        toast.message = `${result.plan.windowMoves.length - result.failures.length} windows moved, ${result.failures.length} skipped`;
+        toast.message = `${result.moves.length} windows moved, ${result.failures.length} skipped`;
         setReportTitle(`Restore Report: ${layout.name}`);
-        setReport(
-          [
-            "Problems",
-            formatRestoreFailures(result.failures),
-            "",
-            movesReport,
-            ...(missingSummary ? ["", missingSummary] : []),
-          ].join("\n"),
-        );
+        setReport(reportData);
         return;
       }
 
       toast.style = Toast.Style.Success;
       toast.title = `Restored ${layout.name}`;
-      toast.message = `${result.plan.windowMoves.length} windows moved, ${result.plan.unmatchedSavedWindows.length} missing`;
+      toast.message = `${result.moves.length} windows moved, ${result.plan.unmatchedSavedWindows.length} missing`;
       setReportTitle(`Restore Report: ${layout.name}`);
-      setReport([movesReport, ...(missingSummary ? ["", missingSummary] : [])].join("\n"));
+      setReport(reportData);
     } catch (restoreError) {
       const message = restoreError instanceof Error ? restoreError.message : "Unexpected error";
       toast.style = Toast.Style.Failure;
@@ -80,7 +67,7 @@ export default function Command() {
   }
 
   if (report) {
-    return <ReportDetail title={reportTitle} report={report} onBack={() => setReport(null)} />;
+    return <RestoreReportList title={reportTitle} report={report} onBack={() => setReport(null)} />;
   }
 
   return (

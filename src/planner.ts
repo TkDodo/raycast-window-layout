@@ -96,6 +96,7 @@ export function createRestorePlan(layout: SavedLayout, snapshot: SystemSnapshot)
     }
 
     windowMoves.push({
+      savedWindowId: savedWindow.id,
       windowId: match.candidate.id,
       app: match.candidate.app,
       title: match.candidate.title,
