@@ -1,9 +1,9 @@
-export interface SaveLayoutOption {
+interface SaveLayoutOption {
   name: string;
   notes?: string;
 }
 
-export interface SaveLayoutDraft {
+interface SaveLayoutDraft {
   selectedLayoutName: string;
   name: string;
   notes: string;

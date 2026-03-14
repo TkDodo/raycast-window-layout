@@ -5,7 +5,7 @@ import { getLayout, getLayouts, upsertLayout } from "./layout-store";
 import { getSaveLayoutDraft } from "./save-layout-state";
 import { ErrorDetail } from "./ui";
 import { formatYabaiRequirementHint } from "./yabai-errors";
-import { ensureYabai, getSnapshot, YabaiUnavailableError } from "./yabai";
+import { ensureYabai, getSnapshot } from "./yabai";
 
 interface Values {
   existingLayout?: string;
@@ -17,9 +17,9 @@ export default function Command() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [layouts, setLayouts] = useState<{ name: string; notes?: string }[]>([]);
-  const [selectedLayoutName, setSelectedLayoutName] = useState<string>("");
-  const [name, setName] = useState<string>("");
-  const [notes, setNotes] = useState<string>("");
+  const [selectedLayoutName, setSelectedLayoutName] = useState("");
+  const [name, setName] = useState("");
+  const [notes, setNotes] = useState("");
 
   useEffect(() => {
     async function loadLayouts() {

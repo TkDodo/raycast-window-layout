@@ -68,7 +68,7 @@ export interface SystemSnapshot {
   windows: YabaiWindow[];
 }
 
-export interface DisplayMatch {
+interface DisplayMatch {
   layoutDisplayId: string;
   currentDisplayId: number;
   currentDisplayIndex: number;
@@ -132,7 +132,7 @@ export interface RestoreReportItem {
   tint: "red" | "green" | "white";
 }
 
-export interface RestoreReportSection {
+interface RestoreReportSection {
   title: string;
   items: RestoreReportItem[];
 }

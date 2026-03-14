@@ -134,11 +134,6 @@ export async function getSnapshot(): Promise<SystemSnapshot> {
   return { displays, spaces, windows };
 }
 
-export async function createSpaceOnDisplay(displayId: number): Promise<void> {
-  await runYabai(["display", "--focus", String(displayId)]);
-  await runYabai(["space", "--create"]);
-}
-
 export async function moveWindowToSpace(windowId: number, spaceIndex: number): Promise<void> {
   await runYabai(["window", String(windowId), "--space", String(spaceIndex)]);
 }
