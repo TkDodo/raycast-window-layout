@@ -4,7 +4,16 @@ import { SavedLayout } from "./types";
 const STORAGE_KEY = "saved-window-layouts";
 
 function sortLayouts(layouts: SavedLayout[]): SavedLayout[] {
-  return [...layouts].sort((left, right) => left.name.localeCompare(right.name));
+  return [...layouts].sort((left, right) => {
+    const leftUsedAt = left.lastUsedAt ? new Date(left.lastUsedAt).getTime() : 0;
+    const rightUsedAt = right.lastUsedAt ? new Date(right.lastUsedAt).getTime() : 0;
+
+    if (leftUsedAt !== rightUsedAt) {
+      return rightUsedAt - leftUsedAt;
+    }
+
+    return left.name.localeCompare(right.name);
+  });
 }
 
 function parseLayouts(raw: string | undefined | null): SavedLayout[] {
@@ -31,9 +40,28 @@ export async function getLayout(name: string): Promise<SavedLayout | undefined> 
 
 export async function upsertLayout(layout: SavedLayout): Promise<void> {
   const layouts = await getLayouts();
+  const existing = layouts.find((entry) => entry.name === layout.name);
   const next = layouts.filter((entry) => entry.name !== layout.name);
-  next.push(layout);
+  next.push({
+    ...layout,
+    lastUsedAt: layout.lastUsedAt ?? existing?.lastUsedAt,
+  });
   await persistLayouts(next);
+}
+
+export async function markLayoutUsed(name: string): Promise<void> {
+  const layouts = await getLayouts();
+  const timestamp = new Date().toISOString();
+  await persistLayouts(
+    layouts.map((layout) =>
+      layout.name === name
+        ? {
+            ...layout,
+            lastUsedAt: timestamp,
+          }
+        : layout,
+    ),
+  );
 }
 
 export async function removeLayout(name: string): Promise<void> {

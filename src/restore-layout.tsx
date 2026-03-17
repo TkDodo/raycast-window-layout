@@ -1,6 +1,6 @@
 import { Action, ActionPanel, Icon, List, Toast, showToast } from "@raycast/api";
 import { useEffect, useState } from "react";
-import { getLayouts } from "./layout-store";
+import { getLayouts, markLayoutUsed } from "./layout-store";
 import { buildRestoreReport, restoreLayout } from "./restore";
 import { RestoreReport, SavedLayout } from "./types";
 import { EmptyState, ErrorDetail, RestoreReportList, layoutAccessories } from "./ui";
@@ -37,6 +37,8 @@ export default function Command() {
       const result = await restoreLayout(layout);
       const missingApps = Array.from(new Set(result.plan.unmatchedSavedWindows.map((window) => window.app)));
       const reportData = buildRestoreReport(result.failures, result.moves, missingApps);
+      await markLayoutUsed(layout.name);
+      setLayouts(await getLayouts());
 
       if (result.failures.length > 0) {
         toast.style = Toast.Style.Success;

@@ -13,9 +13,12 @@ export function EmptyState(props: { title: string; description: string; action?:
 }
 
 export function layoutAccessories(layout: SavedLayout): List.Item.Accessory[] {
+  const lastUsedLabel = layout.lastUsedAt ? new Date(layout.lastUsedAt).toLocaleString() : "Never";
+
   return [
     { icon: Icon.AppWindowGrid2x2, text: `${layout.windows.length} windows` },
     { icon: Icon.Desktop, text: `${layout.displays.length} displays` },
+    { icon: Icon.Clock, text: `Last used ${lastUsedLabel}` },
     { tag: { value: new Date(layout.updatedAt).toLocaleDateString(), color: Color.SecondaryText } },
   ];
 }

@@ -30,6 +30,7 @@ export interface SavedLayout {
   notes?: string;
   createdAt: string;
   updatedAt: string;
+  lastUsedAt?: string;
   displays: DisplayFingerprint[];
   windows: SavedWindow[];
 }
