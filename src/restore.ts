@@ -75,11 +75,13 @@ async function runWindowMoveSequence(
   move: PlannedWindowMove,
   snapshot: SystemSnapshot,
 ): Promise<RestoredWindowMove> {
-  await moveWindowToDisplay(windowId, move.targetDisplayIndex);
-
   const currentWindow = snapshot.windows.find((window) => window.id === windowId);
   const currentDisplay = currentWindow ? findDisplay(snapshot.displays, currentWindow.display) : undefined;
   const currentSpace = currentWindow ? resolveWindowSpace(snapshot, currentWindow) : undefined;
+  if (currentDisplay?.index !== move.targetDisplayIndex) {
+    await moveWindowToDisplay(windowId, move.targetDisplayIndex);
+  }
+
   const targetSpace = getSpaceForDisplayAndPosition(snapshot.spaces, move.targetDisplayId, move.targetDisplayIndex, move.targetSpacePosition);
   if (targetSpace) {
     await moveWindowToSpace(windowId, targetSpace.index);
@@ -208,6 +210,7 @@ export function buildRestoreReport(
 export async function restoreLayout(layout: SavedLayout): Promise<RestoreResult> {
   const handledSavedWindowIds = new Set<string>();
   const failures: RestoreFailure[] = [];
+  const pendingMissingWindowFailures = new Map<string, RestoreFailure>();
   const moves: RestoredWindowMove[] = [];
   let latestPlan: ReturnType<typeof createRestorePlan> = {
     displayMatches: [],
@@ -244,6 +247,7 @@ export async function restoreLayout(layout: SavedLayout): Promise<RestoreResult>
       if (blocker && move.targetSpacePosition > blocker.existingCount) {
         failures.push(toMissingDesktopFailure(move, blocker));
         handledSavedWindowIds.add(move.savedWindowId);
+        pendingMissingWindowFailures.delete(move.savedWindowId);
         continue;
       }
 
@@ -257,20 +261,21 @@ export async function restoreLayout(layout: SavedLayout): Promise<RestoreResult>
       try {
         moves.push(await runWindowMoveSequence(currentWindow.id, move, currentSnapshot));
         handledSavedWindowIds.add(move.savedWindowId);
+        pendingMissingWindowFailures.delete(move.savedWindowId);
         progressed = true;
       } catch (error) {
         if (!isMissingWindowError(error)) {
           failures.push(toRestoreFailure(move, error));
           handledSavedWindowIds.add(move.savedWindowId);
+          pendingMissingWindowFailures.delete(move.savedWindowId);
           continue;
         }
 
         usedWindowIds.delete(currentWindow.id);
         const retrySnapshot = await getSnapshot();
         const retryWindow = findCurrentWindowForMove(move, retrySnapshot, usedWindowIds);
-        if (!retryWindow || retryWindow.id === currentWindow.id) {
-          failures.push(toRestoreFailure(move, error));
-          handledSavedWindowIds.add(move.savedWindowId);
+        if (!retryWindow) {
+          pendingMissingWindowFailures.set(move.savedWindowId, toRestoreFailure(move, error));
           continue;
         }
 
@@ -278,16 +283,31 @@ export async function restoreLayout(layout: SavedLayout): Promise<RestoreResult>
         try {
           moves.push(await runWindowMoveSequence(retryWindow.id, move, retrySnapshot));
           handledSavedWindowIds.add(move.savedWindowId);
+          pendingMissingWindowFailures.delete(move.savedWindowId);
           progressed = true;
         } catch (retryError) {
+          if (isMissingWindowError(retryError)) {
+            usedWindowIds.delete(retryWindow.id);
+            pendingMissingWindowFailures.set(move.savedWindowId, toRestoreFailure(move, retryError));
+            continue;
+          }
+
           failures.push(toRestoreFailure(move, retryError));
           handledSavedWindowIds.add(move.savedWindowId);
+          pendingMissingWindowFailures.delete(move.savedWindowId);
         }
       }
     }
 
-    if (!progressed) {
+    if (!progressed && pendingMissingWindowFailures.size === 0) {
       break;
+    }
+  }
+
+  for (const [savedWindowId, failure] of pendingMissingWindowFailures) {
+    if (!handledSavedWindowIds.has(savedWindowId)) {
+      failures.push(failure);
+      handledSavedWindowIds.add(savedWindowId);
     }
   }
 

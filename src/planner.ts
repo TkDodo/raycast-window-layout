@@ -8,6 +8,10 @@ import {
   YabaiWindow,
 } from "./types";
 
+function normalizeAppName(app: string): string {
+  return app.trim().toLocaleLowerCase();
+}
+
 function fingerprintId(display: DisplayFingerprint): string {
   return display.uuid ?? `${display.arrangementIndex}:${display.frame.w}x${display.frame.h}:${display.label}`;
 }
@@ -55,11 +59,11 @@ function matchDisplays(layout: SavedLayout, snapshot: SystemSnapshot): Map<strin
 }
 
 function findCurrentWindows(snapshot: SystemSnapshot): YabaiWindow[] {
-  return snapshot.windows.filter((window) => !window.isHidden && !window.isMinimized && window.isVisible !== false);
+  return snapshot.windows.filter((window) => !window.isHidden && !window.isMinimized);
 }
 
 function rankWindowMatch(savedWindow: SavedWindow, candidate: YabaiWindow): { score: number; matchedBy?: "title" | "app" } {
-  if (savedWindow.app !== candidate.app) {
+  if (normalizeAppName(savedWindow.app) !== normalizeAppName(candidate.app)) {
     return { score: -1 };
   }
 

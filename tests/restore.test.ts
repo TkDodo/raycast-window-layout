@@ -143,7 +143,7 @@ describe("restoreLayout", () => {
     const { restoreLayout } = await import("../src/restore");
     await restoreLayout(layout);
 
-    expect(moveWindowToDisplay).toHaveBeenCalledWith(2548, 1);
+    expect(moveWindowToDisplay).not.toHaveBeenCalled();
   });
 
   it("preserves global mission-control desktop indices across displays", async () => {
@@ -226,7 +226,7 @@ describe("restoreLayout", () => {
     const { restoreLayout } = await import("../src/restore");
     await restoreLayout(layout);
 
-    expect(moveWindowToDisplay).toHaveBeenCalledWith(3001, 3);
+    expect(moveWindowToDisplay).not.toHaveBeenCalled();
     expect(moveWindowToSpace).toHaveBeenCalledWith(3001, 7);
   });
 
@@ -291,7 +291,7 @@ describe("restoreLayout", () => {
     const { restoreLayout } = await import("../src/restore");
     await restoreLayout(layout);
 
-    expect(moveWindowToDisplay).toHaveBeenCalledWith(4001, 2);
+    expect(moveWindowToDisplay).not.toHaveBeenCalled();
     expect(moveWindowToSpace).toHaveBeenCalledWith(4001, 9);
   });
 
@@ -609,14 +609,349 @@ describe("restoreLayout", () => {
     const { restoreLayout } = await import("../src/restore");
     await restoreLayout(layout);
 
-    expect(moveWindowToDisplay).toHaveBeenCalledWith(4357, 1);
+    expect(moveWindowToDisplay).not.toHaveBeenCalled();
     expect(moveWindowToSpace).toHaveBeenCalledWith(4357, 1);
     expect(resizeWindow).toHaveBeenCalledWith(4357, { x: 10, y: 20, w: 1200, h: 900 });
+  });
+
+  it("retries the same window id when yabai transiently loses the window during restore", async () => {
+    const snapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 1,
+          uuid: "built-in",
+          index: 1,
+          frame: { x: 0, y: 0, w: 1512, h: 982 },
+          spaces: [1],
+          label: "MacBook Pro",
+        },
+        {
+          id: 2,
+          uuid: "vertical",
+          index: 2,
+          frame: { x: 4952, y: -1581, w: 1440, h: 2560 },
+          spaces: [2, 3, 4],
+          label: "Vertical",
+        },
+      ],
+      spaces: [
+        { id: 1, index: 1, display: 1 },
+        { id: 2, index: 2, display: 2 },
+        { id: 3, index: 3, display: 2 },
+        { id: 4, index: 4, display: 2 },
+      ],
+      windows: [
+        {
+          id: 258,
+          app: "thunderbird",
+          title: "",
+          display: 1,
+          space: 1,
+          frame: { x: 0, y: 0, w: 1200, h: 900 },
+        },
+      ],
+    };
+
+    const layout: SavedLayout = {
+      name: "Home",
+      createdAt: "2026-03-09T00:00:00.000Z",
+      updatedAt: "2026-03-31T10:29:02.148Z",
+      displays: [
+        {
+          uuid: "vertical",
+          arrangementIndex: 2,
+          frame: { x: 4952, y: -1581, w: 1440, h: 2560 },
+          label: "Vertical",
+        },
+      ],
+      windows: [
+        {
+          id: "thunderbird:2:3:1",
+          app: "thunderbird",
+          title: "",
+          matchMode: "app",
+          targetDisplayId: "vertical",
+          targetSpaceIndex: 3,
+          targetSpacePosition: 2,
+          targetFrame: { x: 4952, y: -289, w: 1440, h: 1268 },
+        },
+      ],
+    };
+
+    getSnapshot.mockResolvedValue(snapshot);
+    moveWindowToDisplay
+      .mockRejectedValueOnce(
+        new Error(
+          "yabai command failed: could not locate the window to act on! Command failed: /opt/homebrew/bin/yabai -m window 258 --display 2 could not locate the window to act on!",
+        ),
+      )
+      .mockResolvedValueOnce(undefined);
+
+    const { restoreLayout } = await import("../src/restore");
+    await restoreLayout(layout);
+
+    expect(moveWindowToDisplay).toHaveBeenNthCalledWith(1, 258, 2);
+    expect(moveWindowToDisplay).toHaveBeenNthCalledWith(2, 258, 2);
+    expect(moveWindowToSpace).toHaveBeenCalledWith(258, 3);
+    expect(resizeWindow).toHaveBeenCalledWith(258, { x: 4952, y: -289, w: 1440, h: 1268 });
+  });
+
+  it("skips the display move when the window is already on the target display", async () => {
+    const snapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 2,
+          uuid: "vertical",
+          index: 2,
+          frame: { x: 4952, y: -1581, w: 1440, h: 2560 },
+          spaces: [2, 3, 4],
+          label: "Vertical",
+        },
+      ],
+      spaces: [
+        { id: 2, index: 2, display: 2 },
+        { id: 3, index: 3, display: 2 },
+        { id: 4, index: 4, display: 2 },
+      ],
+      windows: [
+        {
+          id: 258,
+          app: "thunderbird",
+          title: "",
+          display: 2,
+          space: 2,
+          frame: { x: 4952, y: -289, w: 1440, h: 1268 },
+        },
+      ],
+    };
+
+    const layout: SavedLayout = {
+      name: "Home",
+      createdAt: "2026-03-09T00:00:00.000Z",
+      updatedAt: "2026-03-31T10:29:02.148Z",
+      displays: [
+        {
+          uuid: "vertical",
+          arrangementIndex: 2,
+          frame: { x: 4952, y: -1581, w: 1440, h: 2560 },
+          label: "Vertical",
+        },
+      ],
+      windows: [
+        {
+          id: "thunderbird:2:3:1",
+          app: "thunderbird",
+          title: "",
+          matchMode: "app",
+          targetDisplayId: "vertical",
+          targetSpaceIndex: 3,
+          targetSpacePosition: 2,
+          targetFrame: { x: 4952, y: -289, w: 1440, h: 1268 },
+        },
+      ],
+    };
+
+    getSnapshot.mockResolvedValue(snapshot);
+    moveWindowToDisplay.mockRejectedValue(
+      new Error(
+        "yabai command failed: could not locate the window to act on! Command failed: /opt/homebrew/bin/yabai -m window 258 --display 2 could not locate the window to act on!",
+      ),
+    );
+
+    const { restoreLayout } = await import("../src/restore");
+    await restoreLayout(layout);
+
+    expect(moveWindowToDisplay).not.toHaveBeenCalled();
+    expect(moveWindowToSpace).toHaveBeenCalledWith(258, 3);
+    expect(resizeWindow).toHaveBeenCalledWith(258, { x: 4952, y: -289, w: 1440, h: 1268 });
+  });
+
+  it("matches Thunderbird after restart even when yabai reports a capitalized app name and is-visible false", async () => {
+    const snapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 2,
+          uuid: "vertical",
+          index: 2,
+          frame: { x: 4952, y: -1581, w: 1440, h: 2560 },
+          spaces: [2, 3, 4],
+          label: "Vertical",
+        },
+      ],
+      spaces: [
+        { id: 2, index: 2, display: 2 },
+        { id: 3, index: 3, display: 2 },
+        { id: 4, index: 4, display: 2 },
+      ],
+      windows: [
+        {
+          id: 14963,
+          app: "Thunderbird",
+          title: "Inbox - dominik.dorfmeister@mycts.at",
+          display: 2,
+          space: 3,
+          frame: { x: 4952, y: -289, w: 1440, h: 1268 },
+          isVisible: false,
+          isMinimized: false,
+          isHidden: false,
+        },
+      ],
+    };
+
+    const layout: SavedLayout = {
+      name: "Home",
+      createdAt: "2026-03-09T00:00:00.000Z",
+      updatedAt: "2026-03-31T10:29:02.148Z",
+      displays: [
+        {
+          uuid: "vertical",
+          arrangementIndex: 2,
+          frame: { x: 4952, y: -1581, w: 1440, h: 2560 },
+          label: "Vertical",
+        },
+      ],
+      windows: [
+        {
+          id: "thunderbird:2:3:1",
+          app: "thunderbird",
+          title: "",
+          matchMode: "app",
+          targetDisplayId: "vertical",
+          targetSpaceIndex: 3,
+          targetSpacePosition: 2,
+          targetFrame: { x: 4952, y: -289, w: 1440, h: 1268 },
+        },
+      ],
+    };
+
+    getSnapshot.mockResolvedValue(snapshot);
+
+    const { restoreLayout } = await import("../src/restore");
+    const result = await restoreLayout(layout);
+
+    expect(moveWindowToSpace).toHaveBeenCalledWith(14963, 3);
+    expect(resizeWindow).toHaveBeenCalledWith(14963, { x: 4952, y: -289, w: 1440, h: 1268 });
+    expect(result.plan.unmatchedSavedWindows).toEqual([]);
+  });
+
+  it("does not give up on a window that reappears after the immediate missing-window retry", async () => {
+    const planningSnapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 1,
+          uuid: "built-in",
+          index: 1,
+          frame: { x: 0, y: 0, w: 1512, h: 982 },
+          spaces: [1],
+          label: "MacBook Pro",
+        },
+        {
+          id: 2,
+          uuid: "vertical",
+          index: 2,
+          frame: { x: 4952, y: -1581, w: 1440, h: 2560 },
+          spaces: [2, 3, 4],
+          label: "Vertical",
+        },
+      ],
+      spaces: [
+        { id: 1, index: 1, display: 1 },
+        { id: 2, index: 2, display: 2 },
+        { id: 3, index: 3, display: 2 },
+        { id: 4, index: 4, display: 2 },
+      ],
+      windows: [
+        {
+          id: 258,
+          app: "thunderbird",
+          title: "",
+          display: 1,
+          space: 1,
+          frame: { x: 0, y: 0, w: 1200, h: 900 },
+        },
+      ],
+    };
+
+    const missingRetrySnapshot: SystemSnapshot = {
+      ...planningSnapshot,
+      windows: [],
+    };
+
+    const laterPassSnapshot: SystemSnapshot = {
+      ...planningSnapshot,
+      windows: [
+        {
+          id: 512,
+          app: "thunderbird",
+          title: "",
+          display: 1,
+          space: 1,
+          frame: { x: 0, y: 0, w: 1200, h: 900 },
+        },
+      ],
+    };
+
+    const layout: SavedLayout = {
+      name: "Home",
+      createdAt: "2026-03-09T00:00:00.000Z",
+      updatedAt: "2026-03-31T10:29:02.148Z",
+      displays: [
+        {
+          uuid: "vertical",
+          arrangementIndex: 2,
+          frame: { x: 4952, y: -1581, w: 1440, h: 2560 },
+          label: "Vertical",
+        },
+      ],
+      windows: [
+        {
+          id: "thunderbird:2:3:1",
+          app: "thunderbird",
+          title: "",
+          matchMode: "app",
+          targetDisplayId: "vertical",
+          targetSpaceIndex: 3,
+          targetSpacePosition: 2,
+          targetFrame: { x: 4952, y: -289, w: 1440, h: 1268 },
+        },
+      ],
+    };
+
+    getSnapshot
+      .mockResolvedValueOnce(planningSnapshot)
+      .mockResolvedValueOnce(planningSnapshot)
+      .mockResolvedValueOnce(missingRetrySnapshot)
+      .mockResolvedValueOnce(laterPassSnapshot)
+      .mockResolvedValueOnce(laterPassSnapshot);
+    moveWindowToDisplay
+      .mockRejectedValueOnce(
+        new Error(
+          "yabai command failed: could not locate the window to act on! Command failed: /opt/homebrew/bin/yabai -m window 258 --display 2 could not locate the window to act on!",
+        ),
+      )
+      .mockResolvedValueOnce(undefined);
+
+    const { restoreLayout } = await import("../src/restore");
+    const result = await restoreLayout(layout);
+
+    expect(moveWindowToDisplay).toHaveBeenNthCalledWith(1, 258, 2);
+    expect(moveWindowToDisplay).toHaveBeenNthCalledWith(2, 512, 2);
+    expect(moveWindowToSpace).toHaveBeenCalledWith(512, 3);
+    expect(resizeWindow).toHaveBeenCalledWith(512, { x: 4952, y: -289, w: 1440, h: 1268 });
+    expect(result.failures).toEqual([]);
   });
 
   it("retries with a freshly resolved window id when yabai says the target window disappeared mid-restore", async () => {
     const planningSnapshot: SystemSnapshot = {
       displays: [
+        {
+          id: 96,
+          uuid: "display-other",
+          index: 2,
+          frame: { x: 1728, y: 0, w: 1728, h: 1117 },
+          spaces: [84],
+          label: "LG UltraFine",
+        },
         {
           id: 95,
           uuid: "display-work",
@@ -626,15 +961,18 @@ describe("restoreLayout", () => {
           label: "Studio Display",
         },
       ],
-      spaces: [{ id: 83, index: 1, display: 95 }],
+      spaces: [
+        { id: 83, index: 1, display: 95 },
+        { id: 84, index: 2, display: 96 },
+      ],
       windows: [
         {
           id: 95,
           app: "Discord",
           title: "TanStack - Discord",
-          display: 95,
-          space: 83,
-          frame: { x: 0, y: 0, w: 1000, h: 900 },
+          display: 96,
+          space: 84,
+          frame: { x: 1728, y: 0, w: 1000, h: 900 },
         },
       ],
     };
@@ -646,9 +984,9 @@ describe("restoreLayout", () => {
           id: 4357,
           app: "Discord",
           title: "TanStack - Discord",
-          display: 95,
-          space: 83,
-          frame: { x: 0, y: 0, w: 1000, h: 900 },
+          display: 96,
+          space: 84,
+          frame: { x: 1728, y: 0, w: 1000, h: 900 },
         },
       ],
     };
@@ -701,8 +1039,16 @@ describe("restoreLayout", () => {
   });
 
   it("continues restoring later windows when one window fails and reports that failure", async () => {
-    const snapshot: SystemSnapshot = {
+    const firstPassSnapshot: SystemSnapshot = {
       displays: [
+        {
+          id: 96,
+          uuid: "display-other",
+          index: 2,
+          frame: { x: 1728, y: 0, w: 1728, h: 1117 },
+          spaces: [84],
+          label: "LG UltraFine",
+        },
         {
           id: 95,
           uuid: "display-work",
@@ -712,23 +1058,40 @@ describe("restoreLayout", () => {
           label: "Studio Display",
         },
       ],
-      spaces: [{ id: 83, index: 1, display: 95 }],
+      spaces: [
+        { id: 83, index: 1, display: 95 },
+        { id: 84, index: 2, display: 96 },
+      ],
       windows: [
         {
           id: 95,
           app: "GitHub Desktop",
           title: "",
-          display: 95,
-          space: 83,
-          frame: { x: 0, y: 0, w: 1000, h: 900 },
+          display: 96,
+          space: 84,
+          frame: { x: 1728, y: 0, w: 1000, h: 900 },
         },
         {
           id: 4357,
           app: "Discord",
           title: "TanStack - Discord",
-          display: 95,
-          space: 83,
-          frame: { x: 0, y: 0, w: 1000, h: 900 },
+          display: 96,
+          space: 84,
+          frame: { x: 1728, y: 0, w: 1000, h: 900 },
+        },
+      ],
+    };
+
+    const laterPassSnapshot: SystemSnapshot = {
+      ...firstPassSnapshot,
+      windows: [
+        {
+          id: 4357,
+          app: "Discord",
+          title: "TanStack - Discord",
+          display: 96,
+          space: 84,
+          frame: { x: 1728, y: 0, w: 1000, h: 900 },
         },
       ],
     };
@@ -769,8 +1132,14 @@ describe("restoreLayout", () => {
       ],
     };
 
-    getSnapshot.mockResolvedValue(snapshot);
+    getSnapshot
+      .mockResolvedValueOnce(firstPassSnapshot)
+      .mockResolvedValueOnce(firstPassSnapshot)
+      .mockResolvedValueOnce(firstPassSnapshot)
+      .mockResolvedValueOnce(firstPassSnapshot)
+      .mockResolvedValueOnce(laterPassSnapshot);
     moveWindowToDisplay
+      .mockRejectedValueOnce(new Error("yabai command failed: could not locate the window to act on!"))
       .mockRejectedValueOnce(new Error("yabai command failed: could not locate the window to act on!"))
       .mockResolvedValueOnce(undefined);
 
@@ -778,7 +1147,8 @@ describe("restoreLayout", () => {
     const result = await restoreLayout(layout);
 
     expect(moveWindowToDisplay).toHaveBeenNthCalledWith(1, 95, 1);
-    expect(moveWindowToDisplay).toHaveBeenNthCalledWith(2, 4357, 1);
+    expect(moveWindowToDisplay).toHaveBeenNthCalledWith(2, 95, 1);
+    expect(moveWindowToDisplay).toHaveBeenNthCalledWith(3, 4357, 1);
     expect(result.failures).toEqual([
       expect.objectContaining({
         app: "GitHub Desktop",
