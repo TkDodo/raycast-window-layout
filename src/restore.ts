@@ -70,6 +70,52 @@ function resolveWindowSpace(snapshot: SystemSnapshot, window: YabaiWindow): Yaba
   );
 }
 
+function describeWindowLocation(snapshot: SystemSnapshot, window: YabaiWindow): string {
+  const display = findDisplay(snapshot.displays, window.display);
+  const space = resolveWindowSpace(snapshot, window);
+
+  return `display ${display?.index ?? "?"}, desktop ${space?.index ?? "?"}`;
+}
+
+class UnsupportedDesktopMoveError extends Error {
+  constructor(
+    move: PlannedWindowMove,
+    snapshot: SystemSnapshot,
+    window: YabaiWindow,
+    targetSpace: YabaiSpace,
+  ) {
+    super(
+      `Desktop move skipped: yabai reported success moving it to display ${move.targetDisplayIndex}, desktop ${targetSpace.index}, but it remained on ${describeWindowLocation(snapshot, window)}. On macOS 15 with SIP enabled, yabai cannot move windows between desktops without the scripting addition.`,
+    );
+    this.name = "UnsupportedDesktopMoveError";
+  }
+}
+
+function assertDesktopMoveApplied(
+  move: PlannedWindowMove,
+  windowId: number,
+  targetSpace: YabaiSpace | undefined,
+  snapshot: SystemSnapshot,
+): void {
+  if (!targetSpace) {
+    return;
+  }
+
+  const movedWindow = snapshot.windows.find((window) => window.id === windowId);
+  if (!movedWindow) {
+    return;
+  }
+
+  const movedDisplay = findDisplay(snapshot.displays, movedWindow.display);
+  const movedSpace = resolveWindowSpace(snapshot, movedWindow);
+
+  if (movedDisplay?.index === move.targetDisplayIndex && movedSpace?.index === targetSpace.index) {
+    return;
+  }
+
+  throw new UnsupportedDesktopMoveError(move, snapshot, movedWindow, targetSpace);
+}
+
 async function runWindowMoveSequence(
   windowId: number,
   move: PlannedWindowMove,
@@ -88,6 +134,7 @@ async function runWindowMoveSequence(
   }
 
   await resizeWindow(windowId, move.targetFrame);
+  assertDesktopMoveApplied(move, windowId, targetSpace, await getSnapshot());
 
   return {
     windowId,

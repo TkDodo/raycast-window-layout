@@ -891,6 +891,20 @@ describe("restoreLayout", () => {
       ],
     };
 
+    const restoredSnapshot: SystemSnapshot = {
+      ...planningSnapshot,
+      windows: [
+        {
+          id: 512,
+          app: "thunderbird",
+          title: "",
+          display: 2,
+          space: 3,
+          frame: { x: 4952, y: -289, w: 1440, h: 1268 },
+        },
+      ],
+    };
+
     const layout: SavedLayout = {
       name: "Home",
       createdAt: "2026-03-09T00:00:00.000Z",
@@ -922,7 +936,8 @@ describe("restoreLayout", () => {
       .mockResolvedValueOnce(planningSnapshot)
       .mockResolvedValueOnce(missingRetrySnapshot)
       .mockResolvedValueOnce(laterPassSnapshot)
-      .mockResolvedValueOnce(laterPassSnapshot);
+      .mockResolvedValueOnce(laterPassSnapshot)
+      .mockResolvedValue(restoredSnapshot);
     moveWindowToDisplay
       .mockRejectedValueOnce(
         new Error(
@@ -1096,6 +1111,20 @@ describe("restoreLayout", () => {
       ],
     };
 
+    const discordMovedSnapshot: SystemSnapshot = {
+      ...firstPassSnapshot,
+      windows: [
+        {
+          id: 4357,
+          app: "Discord",
+          title: "TanStack - Discord",
+          display: 95,
+          space: 83,
+          frame: { x: 20, y: 30, w: 600, h: 600 },
+        },
+      ],
+    };
+
     const layout: SavedLayout = {
       name: "Work",
       createdAt: "2026-03-09T00:00:00.000Z",
@@ -1137,7 +1166,8 @@ describe("restoreLayout", () => {
       .mockResolvedValueOnce(firstPassSnapshot)
       .mockResolvedValueOnce(firstPassSnapshot)
       .mockResolvedValueOnce(firstPassSnapshot)
-      .mockResolvedValueOnce(laterPassSnapshot);
+      .mockResolvedValueOnce(discordMovedSnapshot)
+      .mockResolvedValue(laterPassSnapshot);
     moveWindowToDisplay
       .mockRejectedValueOnce(new Error("yabai command failed: could not locate the window to act on!"))
       .mockRejectedValueOnce(new Error("yabai command failed: could not locate the window to act on!"))
@@ -1155,5 +1185,77 @@ describe("restoreLayout", () => {
       }),
     ]);
     expect(moveWindowToSpace).toHaveBeenCalledWith(4357, 1);
+  });
+
+  it("reports unsupported desktop moves when yabai reports success but the window stays on the old desktop", async () => {
+    const snapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 3,
+          uuid: "wide",
+          index: 3,
+          frame: { x: 1512, y: -799, w: 3440, h: 1440 },
+          spaces: [1086, 315, 7],
+          label: "",
+        },
+      ],
+      spaces: [
+        { id: 1086, index: 6, display: 3 },
+        { id: 315, index: 7, display: 3 },
+        { id: 7, index: 8, display: 3 },
+      ],
+      windows: [
+        {
+          id: 35349,
+          app: "SmartGit",
+          title: "sentry - SmartGit 25.1 Non-Commercial",
+          display: 3,
+          space: 6,
+          frame: { x: 1512, y: -774, w: 3440, h: 1415 },
+        },
+      ],
+    };
+
+    const layout: SavedLayout = {
+      name: "Home",
+      createdAt: "2026-03-09T00:00:00.000Z",
+      updatedAt: "2026-04-25T17:49:31.257Z",
+      displays: [
+        {
+          uuid: "wide",
+          arrangementIndex: 3,
+          frame: { x: 1512, y: -799, w: 3440, h: 1440 },
+          label: "",
+        },
+      ],
+      windows: [
+        {
+          id: "SmartGit:3:7:9",
+          app: "SmartGit",
+          title: "TanStackQuery - SmartGit 25.1 Non-Commercial",
+          matchMode: "app",
+          targetDisplayId: "wide",
+          targetSpaceIndex: 7,
+          targetSpacePosition: 2,
+          targetFrame: { x: 1512, y: -774, w: 3440, h: 1415 },
+        },
+      ],
+    };
+
+    getSnapshot.mockResolvedValue(snapshot);
+
+    const { restoreLayout } = await import("../src/restore");
+    const result = await restoreLayout(layout);
+
+    expect(moveWindowToSpace).toHaveBeenCalledWith(35349, 7);
+    expect(resizeWindow).toHaveBeenCalledWith(35349, { x: 1512, y: -774, w: 3440, h: 1415 });
+    expect(result.moves).toEqual([]);
+    expect(result.failures).toEqual([
+      expect.objectContaining({
+        app: "SmartGit",
+        reason:
+          "Desktop move skipped: yabai reported success moving it to display 3, desktop 7, but it remained on display 3, desktop 6. On macOS 15 with SIP enabled, yabai cannot move windows between desktops without the scripting addition.",
+      }),
+    ]);
   });
 });
