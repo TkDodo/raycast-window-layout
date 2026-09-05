@@ -6,6 +6,7 @@ import {
   RestoreReport,
   RestoreReportItem,
   RestoreResult,
+  RestoreWarning,
   RestoredWindowMove,
   SavedLayout,
   SystemSnapshot,
@@ -17,12 +18,23 @@ import { getSnapshot, moveWindowToDisplay, moveWindowToSpace, resizeWindow } fro
 
 function getSpaceForDisplayAndPosition(
   spaces: YabaiSpace[],
-  displayId: number,
-  displayIndex: number,
+  display: YabaiDisplay,
   position: number,
 ): YabaiSpace | undefined {
+  const spacesByDisplayIndex = spaces.filter((space) => space.display === display.index).sort((left, right) => left.index - right.index);
+
+  if (spacesByDisplayIndex.length > 0) {
+    return spacesByDisplayIndex.at(position - 1);
+  }
+
+  const spacesByDisplayId = spaces.filter((space) => space.display === display.id).sort((left, right) => left.index - right.index);
+  if (spacesByDisplayId.length > 0) {
+    return spacesByDisplayId.at(position - 1);
+  }
+
+  const displaySpaceRefs = new Set(display.spaces);
   return spaces
-    .filter((space) => space.display === displayId || space.display === displayIndex)
+    .filter((space) => displaySpaceRefs.has(space.id) || displaySpaceRefs.has(space.index))
     .sort((left, right) => left.index - right.index)
     .at(position - 1);
 }
@@ -57,8 +69,26 @@ function findDisplay(displays: YabaiDisplay[], displayRef: number): YabaiDisplay
   return displays.find((display) => display.id === displayRef || display.index === displayRef);
 }
 
+function findDisplayById(displays: YabaiDisplay[], displayId: number): YabaiDisplay | undefined {
+  return displays.find((display) => display.id === displayId);
+}
+
+function findWindowDisplay(snapshot: SystemSnapshot, window: YabaiWindow): YabaiDisplay | undefined {
+  const byIndex = snapshot.displays.find((display) => display.index === window.display);
+  if (byIndex) {
+    const hasWindowSpace = snapshot.spaces.some(
+      (space) => (space.display === byIndex.id || space.display === byIndex.index) && (space.id === window.space || space.index === window.space),
+    );
+    if (hasWindowSpace) {
+      return byIndex;
+    }
+  }
+
+  return snapshot.displays.find((display) => display.id === window.display);
+}
+
 function resolveWindowSpace(snapshot: SystemSnapshot, window: YabaiWindow): YabaiSpace | undefined {
-  const currentDisplay = findDisplay(snapshot.displays, window.display);
+  const currentDisplay = findWindowDisplay(snapshot, window);
   const displayId = currentDisplay?.id ?? window.display;
   const displayIndex = currentDisplay?.index ?? window.display;
 
@@ -71,7 +101,7 @@ function resolveWindowSpace(snapshot: SystemSnapshot, window: YabaiWindow): Yaba
 }
 
 function describeWindowLocation(snapshot: SystemSnapshot, window: YabaiWindow): string {
-  const display = findDisplay(snapshot.displays, window.display);
+  const display = findWindowDisplay(snapshot, window);
   const space = resolveWindowSpace(snapshot, window);
 
   return `display ${display?.index ?? "?"}, desktop ${space?.index ?? "?"}`;
@@ -85,35 +115,57 @@ class UnsupportedDesktopMoveError extends Error {
     targetSpace: YabaiSpace,
   ) {
     super(
-      `Desktop move skipped: yabai reported success moving it to display ${move.targetDisplayIndex}, desktop ${targetSpace.index}, but it remained on ${describeWindowLocation(snapshot, window)}. On macOS 15 with SIP enabled, yabai cannot move windows between desktops without the scripting addition.`,
+      `Desktop move skipped: yabai reported success moving it to display ${move.targetDisplayIndex}, desktop ${targetSpace.index}, but it remained on ${describeWindowLocation(snapshot, window)}. Ensure the yabai scripting addition is installed and loaded, then try again.`,
     );
     this.name = "UnsupportedDesktopMoveError";
   }
 }
 
-function assertDesktopMoveApplied(
+class InaccessibleWindowWarning extends Error {
+  constructor(move: PlannedWindowMove) {
+    super(
+      `Skipped because yabai has no macOS Accessibility reference for this untitled window. Focus or reopen ${move.app}, then retry.`,
+    );
+    this.name = "InaccessibleWindowWarning";
+  }
+}
+
+function isWindowOnTargetDesktop(
+  move: PlannedWindowMove,
+  snapshot: SystemSnapshot,
+  movedWindow: YabaiWindow,
+  targetSpace: YabaiSpace,
+): boolean {
+  const movedDisplay = findWindowDisplay(snapshot, movedWindow);
+  const movedSpace = resolveWindowSpace(snapshot, movedWindow);
+
+  return movedDisplay?.index === move.targetDisplayIndex && movedSpace?.index === targetSpace.index;
+}
+
+async function assertDesktopMoveApplied(
   move: PlannedWindowMove,
   windowId: number,
   targetSpace: YabaiSpace | undefined,
-  snapshot: SystemSnapshot,
-): void {
+): Promise<void> {
   if (!targetSpace) {
     return;
   }
 
+  const snapshot = await getSnapshot();
   const movedWindow = snapshot.windows.find((window) => window.id === windowId);
   if (!movedWindow) {
     return;
   }
 
-  const movedDisplay = findDisplay(snapshot.displays, movedWindow.display);
-  const movedSpace = resolveWindowSpace(snapshot, movedWindow);
-
-  if (movedDisplay?.index === move.targetDisplayIndex && movedSpace?.index === targetSpace.index) {
+  if (isWindowOnTargetDesktop(move, snapshot, movedWindow, targetSpace)) {
     return;
   }
 
   throw new UnsupportedDesktopMoveError(move, snapshot, movedWindow, targetSpace);
+}
+
+function framesMatch(current: YabaiWindow["frame"], target: PlannedWindowMove["targetFrame"]): boolean {
+  return current.x === target.x && current.y === target.y && current.w === target.w && current.h === target.h;
 }
 
 async function runWindowMoveSequence(
@@ -122,19 +174,33 @@ async function runWindowMoveSequence(
   snapshot: SystemSnapshot,
 ): Promise<RestoredWindowMove> {
   const currentWindow = snapshot.windows.find((window) => window.id === windowId);
-  const currentDisplay = currentWindow ? findDisplay(snapshot.displays, currentWindow.display) : undefined;
+  const currentDisplay = currentWindow ? findWindowDisplay(snapshot, currentWindow) : undefined;
   const currentSpace = currentWindow ? resolveWindowSpace(snapshot, currentWindow) : undefined;
-  if (currentDisplay?.index !== move.targetDisplayIndex) {
+
+  if (currentWindow?.title.trim() === "" && currentWindow.hasAxReference === false) {
+    throw new InaccessibleWindowWarning(move);
+  }
+
+  const targetDisplay = findDisplayById(snapshot.displays, move.targetDisplayId);
+  const targetSpace = targetDisplay
+    ? getSpaceForDisplayAndPosition(snapshot.spaces, targetDisplay, move.targetSpacePosition)
+    : undefined;
+  const displayChanged = currentDisplay?.index !== move.targetDisplayIndex;
+  const desktopChanged = displayChanged || currentSpace?.index !== (targetSpace?.index ?? null);
+  const frameChanged = !currentWindow || !framesMatch(currentWindow.frame, move.targetFrame);
+
+  if (displayChanged) {
     await moveWindowToDisplay(windowId, move.targetDisplayIndex);
   }
 
-  const targetSpace = getSpaceForDisplayAndPosition(snapshot.spaces, move.targetDisplayId, move.targetDisplayIndex, move.targetSpacePosition);
-  if (targetSpace) {
-    await moveWindowToSpace(windowId, targetSpace.index);
+  if (desktopChanged || frameChanged) {
+    await resizeWindow(windowId, move.targetFrame);
   }
 
-  await resizeWindow(windowId, move.targetFrame);
-  assertDesktopMoveApplied(move, windowId, targetSpace, await getSnapshot());
+  if (targetSpace && desktopChanged) {
+    await moveWindowToSpace(windowId, targetSpace.index);
+    await assertDesktopMoveApplied(move, windowId, targetSpace);
+  }
 
   return {
     windowId,
@@ -145,9 +211,7 @@ async function runWindowMoveSequence(
     fromSpaceIndex: currentSpace?.index ?? null,
     toDisplayIndex: move.targetDisplayIndex,
     toSpaceIndex: targetSpace?.index ?? null,
-    changedDesktop:
-      currentDisplay?.index !== move.targetDisplayIndex ||
-      currentSpace?.index !== (targetSpace?.index ?? null),
+    changedDesktop: desktopChanged,
   };
 }
 
@@ -160,6 +224,14 @@ function toRestoreFailure(move: PlannedWindowMove, error: unknown): RestoreFailu
     app: move.app,
     title: move.title,
     reason: error instanceof Error ? error.message : "Unknown restore error",
+  };
+}
+
+function toRestoreWarning(move: PlannedWindowMove, warning: InaccessibleWindowWarning): RestoreWarning {
+  return {
+    app: move.app,
+    title: move.title,
+    reason: warning.message,
   };
 }
 
@@ -183,6 +255,14 @@ function toProblemItem(failure: RestoreFailure): RestoreReportItem {
     title: formatFailureLabel(failure),
     subtitle: failure.reason,
     tint: "red",
+  };
+}
+
+function toWarningItem(warning: RestoreWarning): RestoreReportItem {
+  return {
+    title: formatFailureLabel(warning),
+    subtitle: warning.reason,
+    tint: "yellow",
   };
 }
 
@@ -214,6 +294,7 @@ export function buildRestoreReport(
   failures: RestoreFailure[],
   moves: RestoredWindowMove[],
   missingApps: string[],
+  warnings: RestoreWarning[] = [],
 ): RestoreReport {
   const moved = moves.filter((move) => move.changedDesktop);
   const unchanged = moves.filter((move) => !move.changedDesktop);
@@ -223,6 +304,13 @@ export function buildRestoreReport(
     sections.push({
       title: "Problems",
       items: failures.map(toProblemItem),
+    });
+  }
+
+  if (warnings.length > 0) {
+    sections.push({
+      title: "Warnings",
+      items: warnings.map(toWarningItem),
     });
   }
 
@@ -257,6 +345,7 @@ export function buildRestoreReport(
 export async function restoreLayout(layout: SavedLayout): Promise<RestoreResult> {
   const handledSavedWindowIds = new Set<string>();
   const failures: RestoreFailure[] = [];
+  const warnings: RestoreWarning[] = [];
   const pendingMissingWindowFailures = new Map<string, RestoreFailure>();
   const moves: RestoredWindowMove[] = [];
   let latestPlan: ReturnType<typeof createRestorePlan> = {
@@ -311,6 +400,13 @@ export async function restoreLayout(layout: SavedLayout): Promise<RestoreResult>
         pendingMissingWindowFailures.delete(move.savedWindowId);
         progressed = true;
       } catch (error) {
+        if (error instanceof InaccessibleWindowWarning) {
+          warnings.push(toRestoreWarning(move, error));
+          handledSavedWindowIds.add(move.savedWindowId);
+          pendingMissingWindowFailures.delete(move.savedWindowId);
+          continue;
+        }
+
         if (!isMissingWindowError(error)) {
           failures.push(toRestoreFailure(move, error));
           handledSavedWindowIds.add(move.savedWindowId);
@@ -333,6 +429,13 @@ export async function restoreLayout(layout: SavedLayout): Promise<RestoreResult>
           pendingMissingWindowFailures.delete(move.savedWindowId);
           progressed = true;
         } catch (retryError) {
+          if (retryError instanceof InaccessibleWindowWarning) {
+            warnings.push(toRestoreWarning(move, retryError));
+            handledSavedWindowIds.add(move.savedWindowId);
+            pendingMissingWindowFailures.delete(move.savedWindowId);
+            continue;
+          }
+
           if (isMissingWindowError(retryError)) {
             usedWindowIds.delete(retryWindow.id);
             pendingMissingWindowFailures.set(move.savedWindowId, toRestoreFailure(move, retryError));
@@ -358,5 +461,5 @@ export async function restoreLayout(layout: SavedLayout): Promise<RestoreResult>
     }
   }
 
-  return {plan: latestPlan, failures, moves};
+  return { plan: latestPlan, failures, warnings, moves };
 }

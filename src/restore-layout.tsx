@@ -36,7 +36,7 @@ export default function Command() {
     try {
       const result = await restoreLayout(layout);
       const missingApps = Array.from(new Set(result.plan.unmatchedSavedWindows.map((window) => window.app)));
-      const reportData = buildRestoreReport(result.failures, result.moves, missingApps);
+      const reportData = buildRestoreReport(result.failures, result.moves, missingApps, result.warnings);
       await markLayoutUsed(layout.name);
       setLayouts(await getLayouts());
 
@@ -44,6 +44,15 @@ export default function Command() {
         toast.style = Toast.Style.Success;
         toast.title = `Restored ${layout.name} with skips`;
         toast.message = `${result.moves.length} windows moved, ${result.failures.length} skipped`;
+        setReportTitle(`Restore Report: ${layout.name}`);
+        setReport(reportData);
+        return;
+      }
+
+      if (result.warnings.length > 0) {
+        toast.style = Toast.Style.Success;
+        toast.title = `Restored ${layout.name} with warnings`;
+        toast.message = `${result.moves.length} windows restored, ${result.warnings.length} warnings`;
         setReportTitle(`Restore Report: ${layout.name}`);
         setReport(reportData);
         return;

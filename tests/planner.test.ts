@@ -259,8 +259,88 @@ describe("createLayoutFromSnapshot", () => {
     ]);
   });
 
-  it("skips windows that are present in yabai but not visible", () => {
-    const hiddenSnapshot: SystemSnapshot = {
+  it("captures the display that owns the window space when display ids collide with display indices", () => {
+    const collidingSnapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 2,
+          uuid: "wide",
+          index: 3,
+          frame: { x: 1512, y: -799, w: 3440, h: 1440 },
+          spaces: [231, 241, 242],
+          label: "",
+        },
+        {
+          id: 3,
+          uuid: "vertical",
+          index: 2,
+          frame: { x: 4952, y: -1581, w: 1440, h: 2560 },
+          spaces: [229, 243, 244],
+          label: "",
+        },
+      ],
+      spaces: [
+        { id: 231, index: 6, display: 3 },
+        { id: 241, index: 7, display: 3 },
+        { id: 242, index: 8, display: 3 },
+        { id: 229, index: 3, display: 2 },
+        { id: 243, index: 4, display: 2 },
+        { id: 244, index: 5, display: 2 },
+      ],
+      windows: [
+        {
+          id: 6088,
+          app: "IntelliJ IDEA",
+          title: "sentry2",
+          display: 3,
+          space: 6,
+          frame: { x: 3232, y: -774, w: 1720, h: 1415 },
+        },
+        {
+          id: 177,
+          app: "Discord",
+          title: "Discord",
+          display: 3,
+          space: 8,
+          frame: { x: 1512, y: -774, w: 1720, h: 1415 },
+        },
+        {
+          id: 49,
+          app: "Terminal",
+          title: "sentry",
+          display: 2,
+          space: 4,
+          frame: { x: 4952, y: -1556, w: 1439, h: 1267 },
+        },
+      ],
+    };
+
+    const layout = createLayoutFromSnapshot("Home", collidingSnapshot);
+
+    expect(layout.windows).toEqual([
+      expect.objectContaining({
+        app: "IntelliJ IDEA",
+        targetDisplayId: "wide",
+        targetSpaceIndex: 6,
+        targetSpacePosition: 1,
+      }),
+      expect.objectContaining({
+        app: "Discord",
+        targetDisplayId: "wide",
+        targetSpaceIndex: 8,
+        targetSpacePosition: 3,
+      }),
+      expect.objectContaining({
+        app: "Terminal",
+        targetDisplayId: "vertical",
+        targetSpaceIndex: 4,
+        targetSpacePosition: 2,
+      }),
+    ]);
+  });
+
+  it("captures windows on inactive desktops", () => {
+    const inactiveDesktopSnapshot: SystemSnapshot = {
       ...snapshot,
       windows: [
         ...snapshot.windows,
@@ -276,9 +356,39 @@ describe("createLayoutFromSnapshot", () => {
       ],
     };
 
-    const layout = createLayoutFromSnapshot("Home", hiddenSnapshot);
+    const layout = createLayoutFromSnapshot("Home", inactiveDesktopSnapshot);
 
-    expect(layout.windows.find((window) => window.app === "GitHub Desktop")).toBeUndefined();
+    expect(layout.windows.find((window) => window.app === "GitHub Desktop")).toBeDefined();
+  });
+
+  it("keeps untitled windows without hard-coded app exclusions", () => {
+    const utilitySnapshot: SystemSnapshot = {
+      ...snapshot,
+      windows: [
+        ...snapshot.windows,
+        {
+          id: 103,
+          app: "Moom",
+          title: "",
+          display: 1,
+          space: 1,
+          frame: { x: 100, y: 100, w: 512, h: 312 },
+        },
+        {
+          id: 104,
+          app: "TkDodo",
+          title: "",
+          display: 1,
+          space: 1,
+          frame: { x: 0, y: 0, w: 1000, h: 900 },
+        },
+      ],
+    };
+
+    const layout = createLayoutFromSnapshot("Home", utilitySnapshot);
+
+    expect(layout.windows.find((window) => window.app === "Moom")).toBeDefined();
+    expect(layout.windows.find((window) => window.app === "TkDodo")).toBeDefined();
   });
 
   it("skips Raycast itself when saving layouts", () => {

@@ -25,6 +25,13 @@ describe("restoreLayout", () => {
     resizeWindow.mockReset();
   });
 
+  function withWindowDesktop(snapshot: SystemSnapshot, windowId: number, display: number, space: number): SystemSnapshot {
+    return {
+      ...snapshot,
+      windows: snapshot.windows.map((window) => (window.id === windowId ? { ...window, display, space } : window)),
+    };
+  }
+
   it("moves windows using the target space mission-control index, not the internal yabai id", async () => {
     const snapshot: SystemSnapshot = {
       displays: [
@@ -79,7 +86,10 @@ describe("restoreLayout", () => {
       ],
     };
 
-    getSnapshot.mockResolvedValue(snapshot);
+    getSnapshot
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValue(withWindowDesktop(snapshot, 2548, 1, 85));
 
     const { restoreLayout } = await import("../src/restore");
     await restoreLayout(layout);
@@ -146,6 +156,138 @@ describe("restoreLayout", () => {
     expect(moveWindowToDisplay).not.toHaveBeenCalled();
   });
 
+  it("does not send yabai commands when a window is already correct", async () => {
+    const snapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 3,
+          uuid: "wide",
+          index: 3,
+          frame: { x: 1512, y: -799, w: 3440, h: 1440 },
+          spaces: [10],
+          label: "",
+        },
+      ],
+      spaces: [{ id: 10, index: 8, display: 3 }],
+      windows: [
+        {
+          id: 167,
+          app: "Browser",
+          title: "Dashboard",
+          display: 3,
+          space: 8,
+          frame: { x: 3232, y: -774, w: 1720, h: 1415 },
+          hasAxReference: true,
+        },
+      ],
+    };
+    const layout: SavedLayout = {
+      name: "Home",
+      createdAt: "2026-09-05T11:07:32.458Z",
+      updatedAt: "2026-09-05T11:07:32.458Z",
+      displays: [
+        {
+          uuid: "wide",
+          arrangementIndex: 3,
+          frame: { x: 1512, y: -799, w: 3440, h: 1440 },
+          label: "",
+        },
+      ],
+      windows: [
+        {
+          id: "Browser:3:8:10",
+          app: "Browser",
+          title: "Dashboard",
+          matchMode: "app",
+          targetDisplayId: "wide",
+          targetSpaceIndex: 8,
+          targetSpacePosition: 1,
+          targetFrame: { x: 3232, y: -774, w: 1720, h: 1415 },
+        },
+      ],
+    };
+
+    getSnapshot.mockResolvedValue(snapshot);
+
+    const { restoreLayout } = await import("../src/restore");
+    const result = await restoreLayout(layout);
+
+    expect(moveWindowToDisplay).not.toHaveBeenCalled();
+    expect(moveWindowToSpace).not.toHaveBeenCalled();
+    expect(resizeWindow).not.toHaveBeenCalled();
+    expect(result.failures).toEqual([]);
+    expect(result.moves).toEqual([expect.objectContaining({ app: "Browser", changedDesktop: false })]);
+  });
+
+  it("warns about an untitled window without an Accessibility reference before sending commands", async () => {
+    const snapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 3,
+          uuid: "wide",
+          index: 3,
+          frame: { x: 1512, y: -799, w: 3440, h: 1440 },
+          spaces: [10],
+          label: "",
+        },
+      ],
+      spaces: [{ id: 10, index: 8, display: 3 }],
+      windows: [
+        {
+          id: 167,
+          app: "TkDodo",
+          title: "",
+          display: 3,
+          space: 8,
+          frame: { x: 3232, y: -774, w: 1720, h: 1415 },
+          hasAxReference: false,
+        },
+      ],
+    };
+    const layout: SavedLayout = {
+      name: "Home",
+      createdAt: "2026-09-05T11:07:32.458Z",
+      updatedAt: "2026-09-05T11:07:32.458Z",
+      displays: [
+        {
+          uuid: "wide",
+          arrangementIndex: 3,
+          frame: { x: 1512, y: -799, w: 3440, h: 1440 },
+          label: "",
+        },
+      ],
+      windows: [
+        {
+          id: "TkDodo:3:8:10",
+          app: "TkDodo",
+          title: "",
+          matchMode: "app",
+          targetDisplayId: "wide",
+          targetSpaceIndex: 8,
+          targetSpacePosition: 1,
+          targetFrame: { x: 3232, y: -774, w: 1720, h: 1415 },
+        },
+      ],
+    };
+
+    getSnapshot.mockResolvedValue(snapshot);
+
+    const { restoreLayout } = await import("../src/restore");
+    const result = await restoreLayout(layout);
+
+    expect(moveWindowToDisplay).not.toHaveBeenCalled();
+    expect(moveWindowToSpace).not.toHaveBeenCalled();
+    expect(resizeWindow).not.toHaveBeenCalled();
+    expect(result.failures).toEqual([]);
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        app: "TkDodo",
+        reason:
+          "Skipped because yabai has no macOS Accessibility reference for this untitled window. Focus or reopen TkDodo, then retry.",
+      }),
+    ]);
+  });
+
   it("preserves global mission-control desktop indices across displays", async () => {
     const snapshot: SystemSnapshot = {
       displays: [
@@ -189,7 +331,7 @@ describe("restoreLayout", () => {
           app: "Arc",
           title: "Docs",
           display: 30,
-          space: 17,
+          space: 16,
           frame: { x: 3300, y: 10, w: 1000, h: 900 },
         },
       ],
@@ -228,6 +370,183 @@ describe("restoreLayout", () => {
 
     expect(moveWindowToDisplay).not.toHaveBeenCalled();
     expect(moveWindowToSpace).toHaveBeenCalledWith(3001, 7);
+  });
+
+  it("treats a window display reference as a display index when it collides with another display id", async () => {
+    const snapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 2,
+          uuid: "wide",
+          index: 3,
+          frame: { x: 1512, y: -799, w: 3440, h: 1440 },
+          spaces: [231, 241, 242],
+          label: "",
+        },
+        {
+          id: 3,
+          uuid: "vertical",
+          index: 2,
+          frame: { x: 4952, y: -1581, w: 1440, h: 2560 },
+          spaces: [229, 243, 244],
+          label: "",
+        },
+      ],
+      spaces: [
+        { id: 231, index: 6, display: 3 },
+        { id: 241, index: 7, display: 3 },
+        { id: 242, index: 8, display: 3 },
+        { id: 229, index: 3, display: 2 },
+        { id: 243, index: 4, display: 2 },
+        { id: 244, index: 5, display: 2 },
+      ],
+      windows: [
+        {
+          id: 6088,
+          app: "IntelliJ IDEA",
+          title:
+            "sentry2 [~/work/getsentry/sentry2] – /Users/dodo/work/getsentry/sentry2/static/app/views/explore/logs/useLogsQuery.tsx",
+          display: 3,
+          space: 6,
+          frame: { x: 3232, y: -774, w: 1720, h: 1415 },
+        },
+      ],
+    };
+
+    const layout: SavedLayout = {
+      name: "Home",
+      createdAt: "2026-03-09T00:00:00.000Z",
+      updatedAt: "2026-04-25T17:49:31.257Z",
+      displays: [
+        {
+          uuid: "wide",
+          arrangementIndex: 3,
+          frame: { x: 1512, y: -799, w: 3440, h: 1440 },
+          label: "",
+        },
+        {
+          uuid: "vertical",
+          arrangementIndex: 2,
+          frame: { x: 4952, y: -1581, w: 1440, h: 2560 },
+          label: "",
+        },
+      ],
+      windows: [
+        {
+          id: "IntelliJ IDEA:3:6:6",
+          app: "IntelliJ IDEA",
+          title:
+            "sentry2 [~/work/getsentry/sentry2] – /Users/dodo/work/getsentry/sentry2/static/app/views/explore/logs/useLogsQuery.tsx",
+          matchMode: "app",
+          targetDisplayId: "wide",
+          targetSpaceIndex: 6,
+          targetSpacePosition: 1,
+          targetFrame: { x: 3232, y: -774, w: 1720, h: 1415 },
+        },
+      ],
+    };
+
+    getSnapshot.mockResolvedValue(snapshot);
+
+    const { restoreLayout } = await import("../src/restore");
+    const result = await restoreLayout(layout);
+
+    expect(moveWindowToDisplay).not.toHaveBeenCalled();
+    expect(result.failures).toEqual([]);
+    expect(result.moves).toEqual([
+      expect.objectContaining({
+        fromDisplayIndex: 3,
+        toDisplayIndex: 3,
+        changedDesktop: false,
+      }),
+    ]);
+  });
+
+  it("resolves restore target displays by internal id when the id collides with another display index", async () => {
+    const snapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 2,
+          uuid: "wide",
+          index: 3,
+          frame: { x: 1512, y: -799, w: 3440, h: 1440 },
+          spaces: [6, 7, 8],
+          label: "",
+        },
+        {
+          id: 3,
+          uuid: "vertical",
+          index: 2,
+          frame: { x: 4952, y: -1581, w: 1440, h: 2560 },
+          spaces: [3, 4, 5],
+          label: "",
+        },
+      ],
+      spaces: [
+        { id: 231, index: 6, display: 3 },
+        { id: 241, index: 7, display: 3 },
+        { id: 242, index: 8, display: 3 },
+        { id: 229, index: 3, display: 2 },
+        { id: 243, index: 4, display: 2 },
+        { id: 244, index: 5, display: 2 },
+      ],
+      windows: [
+        {
+          id: 144,
+          app: "Slack",
+          title: "Unread messages - Sentry - Slack",
+          display: 3,
+          space: 6,
+          frame: { x: 1512, y: -774, w: 1720, h: 1415 },
+        },
+      ],
+    };
+
+    const movedSnapshot = withWindowDesktop(snapshot, 144, 2, 3);
+
+    const layout: SavedLayout = {
+      name: "Home",
+      createdAt: "2026-03-09T00:00:00.000Z",
+      updatedAt: "2026-04-28T14:28:31.429Z",
+      displays: [
+        {
+          uuid: "wide",
+          arrangementIndex: 3,
+          frame: { x: 1512, y: -799, w: 3440, h: 1440 },
+          label: "",
+        },
+        {
+          uuid: "vertical",
+          arrangementIndex: 2,
+          frame: { x: 4952, y: -1581, w: 1440, h: 2560 },
+          label: "",
+        },
+      ],
+      windows: [
+        {
+          id: "Slack:2:3:8",
+          app: "Slack",
+          title: "Unread messages - Sentry - Slack",
+          matchMode: "app",
+          targetDisplayId: "vertical",
+          targetSpaceIndex: 3,
+          targetSpacePosition: 1,
+          targetFrame: { x: 4952, y: -1556, w: 1440, h: 1267 },
+        },
+      ],
+    };
+
+    getSnapshot
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValue(movedSnapshot);
+
+    const { restoreLayout } = await import("../src/restore");
+    const result = await restoreLayout(layout);
+
+    expect(moveWindowToDisplay).toHaveBeenCalledWith(144, 2);
+    expect(moveWindowToSpace).toHaveBeenCalledWith(144, 3);
+    expect(result.failures).toEqual([]);
   });
 
   it("moves windows to the current space at the saved per-display position when mission-control indices have shifted", async () => {
@@ -286,7 +605,10 @@ describe("restoreLayout", () => {
       ],
     };
 
-    getSnapshot.mockResolvedValue(snapshot);
+    getSnapshot
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValue(withWindowDesktop(snapshot, 4001, 20, 202));
 
     const { restoreLayout } = await import("../src/restore");
     await restoreLayout(layout);
@@ -369,7 +691,15 @@ describe("restoreLayout", () => {
       ],
     };
 
-    getSnapshot.mockResolvedValue(snapshot);
+    const slackMovedSnapshot = withWindowDesktop(snapshot, 4101, 103, 202);
+    const discordMovedSnapshot = withWindowDesktop(slackMovedSnapshot, 4102, 103, 204);
+
+    getSnapshot
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce(slackMovedSnapshot)
+      .mockResolvedValueOnce(slackMovedSnapshot)
+      .mockResolvedValue(discordMovedSnapshot);
 
     const { restoreLayout } = await import("../src/restore");
     await restoreLayout(layout);
@@ -526,16 +856,19 @@ describe("restoreLayout", () => {
       ],
     };
 
+    const discordMovedSnapshot = withWindowDesktop(settledSnapshot, 4302, 20, 202);
+
     getSnapshot
       .mockResolvedValueOnce(initialSnapshot)
       .mockResolvedValueOnce(initialSnapshot)
       .mockResolvedValueOnce(settledSnapshot)
-      .mockResolvedValue(settledSnapshot);
+      .mockResolvedValueOnce(settledSnapshot)
+      .mockResolvedValue(discordMovedSnapshot);
 
     const { restoreLayout } = await import("../src/restore");
     await restoreLayout(layout);
 
-    expect(moveWindowToSpace).toHaveBeenCalledWith(4301, 5);
+    expect(moveWindowToSpace).not.toHaveBeenCalledWith(4301, 5);
     expect(moveWindowToSpace).toHaveBeenCalledWith(4302, 6);
   });
 
@@ -610,7 +943,7 @@ describe("restoreLayout", () => {
     await restoreLayout(layout);
 
     expect(moveWindowToDisplay).not.toHaveBeenCalled();
-    expect(moveWindowToSpace).toHaveBeenCalledWith(4357, 1);
+    expect(moveWindowToSpace).not.toHaveBeenCalled();
     expect(resizeWindow).toHaveBeenCalledWith(4357, { x: 10, y: 20, w: 1200, h: 900 });
   });
 
@@ -678,7 +1011,11 @@ describe("restoreLayout", () => {
       ],
     };
 
-    getSnapshot.mockResolvedValue(snapshot);
+    getSnapshot
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValue(withWindowDesktop(snapshot, 258, 2, 3));
     moveWindowToDisplay
       .mockRejectedValueOnce(
         new Error(
@@ -751,7 +1088,10 @@ describe("restoreLayout", () => {
       ],
     };
 
-    getSnapshot.mockResolvedValue(snapshot);
+    getSnapshot
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValue(withWindowDesktop(snapshot, 258, 2, 3));
     moveWindowToDisplay.mockRejectedValue(
       new Error(
         "yabai command failed: could not locate the window to act on! Command failed: /opt/homebrew/bin/yabai -m window 258 --display 2 could not locate the window to act on!",
@@ -829,9 +1169,10 @@ describe("restoreLayout", () => {
     const { restoreLayout } = await import("../src/restore");
     const result = await restoreLayout(layout);
 
-    expect(moveWindowToSpace).toHaveBeenCalledWith(14963, 3);
-    expect(resizeWindow).toHaveBeenCalledWith(14963, { x: 4952, y: -289, w: 1440, h: 1268 });
+    expect(moveWindowToSpace).not.toHaveBeenCalled();
+    expect(resizeWindow).not.toHaveBeenCalled();
     expect(result.plan.unmatchedSavedWindows).toEqual([]);
+    expect(result.moves).toEqual([expect.objectContaining({ windowId: 14963, changedDesktop: false })]);
   });
 
   it("does not give up on a window that reappears after the immediate missing-window retry", async () => {
@@ -1254,8 +1595,78 @@ describe("restoreLayout", () => {
       expect.objectContaining({
         app: "SmartGit",
         reason:
-          "Desktop move skipped: yabai reported success moving it to display 3, desktop 7, but it remained on display 3, desktop 6. On macOS 15 with SIP enabled, yabai cannot move windows between desktops without the scripting addition.",
+          "Desktop move skipped: yabai reported success moving it to display 3, desktop 7, but it remained on display 3, desktop 6. Ensure the yabai scripting addition is installed and loaded, then try again.",
       }),
     ]);
+  });
+
+  it("applies the target frame before moving to the target desktop", async () => {
+    const oldDesktopSnapshot: SystemSnapshot = {
+      displays: [
+        {
+          id: 3,
+          uuid: "wide",
+          index: 2,
+          frame: { x: -3440, y: -511, w: 3440, h: 1440 },
+          spaces: [12, 7],
+          label: "",
+        },
+      ],
+      spaces: [
+        { id: 12, index: 4, display: 3 },
+        { id: 7, index: 5, display: 3 },
+      ],
+      windows: [
+        {
+          id: 212,
+          app: "SmartGit",
+          title: "sentry - SmartGit 25.1 Non-Commercial",
+          display: 2,
+          space: 4,
+          frame: { x: -3440, y: -486, w: 3440, h: 1415 },
+        },
+      ],
+    };
+
+    const movedDesktopSnapshot = withWindowDesktop(oldDesktopSnapshot, 212, 2, 5);
+
+    const layout: SavedLayout = {
+      name: "Home",
+      createdAt: "2026-03-09T00:00:00.000Z",
+      updatedAt: "2026-04-25T17:49:31.257Z",
+      displays: [
+        {
+          uuid: "wide",
+          arrangementIndex: 2,
+          frame: { x: -3440, y: -511, w: 3440, h: 1440 },
+          label: "",
+        },
+      ],
+      windows: [
+        {
+          id: "SmartGit:2:5:9",
+          app: "SmartGit",
+          title: "sentry - SmartGit 25.1 Non-Commercial",
+          matchMode: "app",
+          targetDisplayId: "wide",
+          targetSpaceIndex: 5,
+          targetSpacePosition: 2,
+          targetFrame: { x: -3440, y: -486, w: 3440, h: 1415 },
+        },
+      ],
+    };
+
+    getSnapshot
+      .mockResolvedValueOnce(oldDesktopSnapshot)
+      .mockResolvedValueOnce(oldDesktopSnapshot)
+      .mockResolvedValue(movedDesktopSnapshot);
+
+    const { restoreLayout } = await import("../src/restore");
+    const result = await restoreLayout(layout);
+
+    expect(resizeWindow).toHaveBeenCalledWith(212, { x: -3440, y: -486, w: 3440, h: 1415 });
+    expect(moveWindowToSpace).toHaveBeenCalledWith(212, 5);
+    expect(resizeWindow.mock.invocationCallOrder[0]).toBeLessThan(moveWindowToSpace.mock.invocationCallOrder[0]);
+    expect(result.failures).toEqual([]);
   });
 });

@@ -7,6 +7,16 @@ import { SystemSnapshot, YabaiDisplay, YabaiSpace, YabaiWindow } from "./types";
 const execFileAsync = promisify(execFile);
 const DEFAULT_YABAI_CANDIDATES = ["/opt/homebrew/bin/yabai", "/usr/local/bin/yabai", "/opt/local/bin/yabai", "yabai"];
 
+interface RawYabaiWindow extends YabaiWindow {
+  "can-move"?: boolean;
+  "can-resize"?: boolean;
+  "has-ax-reference"?: boolean;
+  "is-hidden"?: boolean;
+  "is-minimized"?: boolean;
+  "is-sticky"?: boolean;
+  "is-visible"?: boolean;
+}
+
 export class YabaiUnavailableError extends Error {
   constructor(message = "yabai is not installed, not running, or not accessible from Raycast.") {
     super(message);
@@ -40,6 +50,19 @@ export function getYabaiEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJ
     USER: user,
     LOGNAME: env.LOGNAME ?? user,
     HOME: home,
+  };
+}
+
+export function normalizeYabaiWindow(window: RawYabaiWindow): YabaiWindow {
+  return {
+    ...window,
+    canMove: window["can-move"] ?? window.canMove,
+    canResize: window["can-resize"] ?? window.canResize,
+    hasAxReference: window["has-ax-reference"] ?? window.hasAxReference,
+    isHidden: window["is-hidden"] ?? window.isHidden,
+    isMinimized: window["is-minimized"] ?? window.isMinimized,
+    isSticky: window["is-sticky"] ?? window.isSticky,
+    isVisible: window["is-visible"] ?? window.isVisible,
   };
 }
 
@@ -128,10 +151,10 @@ export async function getSnapshot(): Promise<SystemSnapshot> {
   const [displays, spaces, windows] = await Promise.all([
     runYabaiJson<YabaiDisplay[]>(["query", "--displays"]),
     runYabaiJson<YabaiSpace[]>(["query", "--spaces"]),
-    runYabaiJson<YabaiWindow[]>(["query", "--windows"]),
+    runYabaiJson<RawYabaiWindow[]>(["query", "--windows"]),
   ]);
 
-  return { displays, spaces, windows };
+  return { displays, spaces, windows: windows.map(normalizeYabaiWindow) };
 }
 
 export async function moveWindowToSpace(windowId: number, spaceIndex: number): Promise<void> {

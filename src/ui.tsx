@@ -62,13 +62,17 @@ export function ErrorDetail(props: { title: string; error: string; onBack?: () =
   );
 }
 
-function iconForTint(tint: "red" | "green" | "white") {
+function iconForTint(tint: "red" | "yellow" | "green" | "white") {
   if (tint === "red") {
     return { source: Icon.XMarkCircle, tintColor: Color.Red };
   }
 
   if (tint === "green") {
     return { source: Icon.CheckCircle, tintColor: Color.Green };
+  }
+
+  if (tint === "yellow") {
+    return { source: Icon.Circle, tintColor: Color.Yellow };
   }
 
   return { source: Icon.Circle, tintColor: Color.SecondaryText };

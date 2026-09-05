@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildRestoreReport } from "../src/restore";
 
 describe("buildRestoreReport", () => {
-  it("orders sections as problems, moved, then already correct", () => {
+  it("orders sections as problems, warnings, moved, then already correct", () => {
     const report = buildRestoreReport(
       [
         {
@@ -36,10 +36,18 @@ describe("buildRestoreReport", () => {
         },
       ],
       ["SmartGit"],
+      [
+        {
+          app: "Moom",
+          title: "",
+          reason: "Skipped because yabai cannot control this window.",
+        },
+      ],
     );
 
     expect(report.sections.map((section) => section.title)).toEqual([
       "Problems",
+      "Warnings",
       "Moved",
       "Already Correct",
       "Missing",
@@ -54,13 +62,20 @@ describe("buildRestoreReport", () => {
 
     expect(report.sections[1].items[0]).toEqual(
       expect.objectContaining({
+        title: "Moom",
+        tint: "yellow",
+      }),
+    );
+
+    expect(report.sections[2].items[0]).toEqual(
+      expect.objectContaining({
         title: "Brave Browser",
         subtitle: "display 1, desktop 1 -> display 2, desktop 5",
         tint: "green",
       }),
     );
 
-    expect(report.sections[2].items[0]).toEqual(
+    expect(report.sections[3].items[0]).toEqual(
       expect.objectContaining({
         title: "Discord",
         subtitle: "didn't move (display 2, desktop 6)",

@@ -61,6 +61,10 @@ export interface YabaiWindow {
   isMinimized?: boolean;
   isHidden?: boolean;
   isVisible?: boolean;
+  canMove?: boolean;
+  canResize?: boolean;
+  hasAxReference?: boolean;
+  isSticky?: boolean;
 }
 
 export interface SystemSnapshot {
@@ -108,6 +112,12 @@ export interface RestoreFailure {
   reason: string;
 }
 
+export interface RestoreWarning {
+  app: string;
+  title: string;
+  reason: string;
+}
+
 export interface RestoredWindowMove {
   windowId: number;
   app: string;
@@ -123,6 +133,7 @@ export interface RestoredWindowMove {
 export interface RestoreResult {
   plan: RestorePlan;
   failures: RestoreFailure[];
+  warnings: RestoreWarning[];
   moves: RestoredWindowMove[];
 }
 
@@ -130,7 +141,7 @@ export interface RestoreReportItem {
   title: string;
   subtitle: string;
   details?: string;
-  tint: "red" | "green" | "white";
+  tint: "red" | "yellow" | "green" | "white";
 }
 
 interface RestoreReportSection {
